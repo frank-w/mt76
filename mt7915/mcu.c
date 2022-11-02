@@ -6,6 +6,7 @@
 #include "mcu.h"
 #include "mac.h"
 #include "eeprom.h"
+#include <linux/moduleparam.h>
 
 #define fw_name(_dev, name, ...)	({			\
 	char *_fw;						\

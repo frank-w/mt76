@@ -33,8 +33,11 @@ mt76_napi_threaded_set(void *data, u64 val)
 	if (!mt76_is_mmio(dev))
 		return -EOPNOTSUPP;
 
+#if 0
+	/* need to backport patch from networking stack */
 	if (dev->napi_dev.threaded != val)
 		return dev_set_threaded(&dev->napi_dev, val);
+#endif
 
 	return 0;
 }

@@ -4,6 +4,7 @@
  */
 
 #include "mt76.h"
+#include <linux/moduleparam.h>
 
 struct sk_buff *
 __mt76_mcu_msg_alloc(struct mt76_dev *dev, const void *data,

@@ -138,6 +138,7 @@ static int mt7996_eeprom_parse_efuse_hw_cap(struct mt7996_dev *dev)
 	if (ret)
 		return ret;
 
+	cap = 0x4b249248;	/* internal hardcode */
 	if (cap) {
 		dev->has_eht = !(cap & MODE_HE_ONLY);
 		dev->wtbl_size_group = u32_get_bits(cap, WTBL_SIZE_GROUP);

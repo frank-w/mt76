@@ -5,6 +5,7 @@
 
 #include <linux/firmware.h>
 #include <linux/fs.h>
+#include <linux/moduleparam.h>
 #include "mt7996.h"
 #include "mcu.h"
 #include "mac.h"
