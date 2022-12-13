@@ -368,6 +368,7 @@ mt7996_init_wiphy(struct ieee80211_hw *hw, struct mtk_wed_device *wed)
 
 	phy->slottime = 9;
 	phy->beacon_rate = -1;
+	phy->muru_onoff = OFDMA_UL | OFDMA_DL | MUMIMO_DL | MUMIMO_UL;
 
 	hw->sta_data_size = sizeof(struct mt7996_sta);
 	hw->vif_data_size = sizeof(struct mt7996_vif);
@@ -615,6 +616,10 @@ static int mt7996_register_phy(struct mt7996_dev *dev, struct mt7996_phy *phy,
 				    wed);
 	if (ret)
 		goto error;
+
+#ifdef CONFIG_MTK_VENDOR
+	mt7996_vendor_register(phy);
+#endif
 
 	ret = mt76_register_phy(mphy, true, mt76_rates,
 				ARRAY_SIZE(mt76_rates));
@@ -1399,6 +1404,10 @@ int mt7996_register_device(struct mt7996_dev *dev)
 
 #ifdef CONFIG_NL80211_TESTMODE
 	dev->mt76.test_ops = &mt7996_testmode_ops;
+#endif
+
+#ifdef CONFIG_MTK_VENDOR
+	mt7996_vendor_register(&dev->phy);
 #endif
 
 	ret = mt76_register_device(&dev->mt76, true, mt76_rates,

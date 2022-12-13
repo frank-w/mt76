@@ -1383,6 +1383,8 @@ static void
 mt7996_mcu_sta_muru_tlv(struct mt7996_dev *dev, struct sk_buff *skb,
 			struct ieee80211_vif *vif, struct ieee80211_sta *sta)
 {
+	struct mt7996_vif *mvif = (struct mt7996_vif *)vif->drv_priv;
+	struct mt7996_phy *phy = mvif->phy;
 	struct ieee80211_he_cap_elem *elem = &sta->deflink.he_cap.he_cap_elem;
 	struct sta_rec_muru *muru;
 	struct tlv *tlv;
@@ -1394,11 +1396,14 @@ mt7996_mcu_sta_muru_tlv(struct mt7996_dev *dev, struct sk_buff *skb,
 	tlv = mt76_connac_mcu_add_tlv(skb, STA_REC_MURU, sizeof(*muru));
 
 	muru = (struct sta_rec_muru *)tlv;
-	muru->cfg.mimo_dl_en = vif->bss_conf.eht_mu_beamformer ||
-			       vif->bss_conf.he_mu_beamformer ||
-			       vif->bss_conf.vht_mu_beamformer ||
-			       vif->bss_conf.vht_mu_beamformee;
-	muru->cfg.ofdma_dl_en = true;
+	muru->cfg.mimo_dl_en = (vif->bss_conf.eht_mu_beamformer ||
+				vif->bss_conf.he_mu_beamformer ||
+				vif->bss_conf.vht_mu_beamformer ||
+				vif->bss_conf.vht_mu_beamformee) &&
+			       !!(phy->muru_onoff & MUMIMO_DL);
+	muru->cfg.mimo_ul_en = !!(phy->muru_onoff & MUMIMO_UL);
+	muru->cfg.ofdma_dl_en = !!(phy->muru_onoff & OFDMA_DL);
+	muru->cfg.ofdma_ul_en = !!(phy->muru_onoff & OFDMA_UL);
 
 	if (sta->deflink.vht_cap.vht_supported)
 		muru->mimo_dl.vht_mu_bfee =
@@ -4928,3 +4933,25 @@ int mt7996_mcu_set_scs(struct mt7996_phy *phy, u8 enable)
 	return mt76_mcu_send_msg(&phy->dev->mt76, MCU_WM_UNI_CMD(SCS),
 				 &req, sizeof(req), false);
 }
+
+#ifdef CONFIG_MTK_VENDOR
+void mt7996_set_wireless_vif(void *data, u8 *mac, struct ieee80211_vif *vif)
+{
+	u8 mode, val;
+	struct mt7996_vif *mvif = (struct mt7996_vif *)vif->drv_priv;
+	struct mt7996_phy *phy =  mvif->phy;
+
+	mode = FIELD_GET(RATE_CFG_MODE, *((u32 *)data));
+	val = FIELD_GET(RATE_CFG_VAL, *((u32 *)data));
+
+	switch (mode) {
+	case RATE_PARAM_AUTO_MU:
+		if (val < 0 || val > 15) {
+			printk("Wrong value! The value is between 0-15.\n");
+			break;
+		}
+		phy->muru_onoff = val;
+		break;
+	}
+}
+#endif

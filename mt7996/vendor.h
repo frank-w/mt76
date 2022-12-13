@@ -1,0 +1,22 @@
+#ifndef __MT7996_VENDOR_H
+#define __MT7996_VENDOR_H
+
+#define MTK_NL80211_VENDOR_ID	0x0ce7
+
+enum mtk_nl80211_vendor_subcmds {
+	MTK_NL80211_VENDOR_SUBCMD_MU_CTRL = 0xc5,
+};
+
+enum mtk_vendor_attr_mu_ctrl {
+	MTK_VENDOR_ATTR_MU_CTRL_UNSPEC,
+
+	MTK_VENDOR_ATTR_MU_CTRL_ONOFF,
+	MTK_VENDOR_ATTR_MU_CTRL_DUMP,
+
+	/* keep last */
+	NUM_MTK_VENDOR_ATTRS_MU_CTRL,
+	MTK_VENDOR_ATTR_MU_CTRL_MAX =
+		NUM_MTK_VENDOR_ATTRS_MU_CTRL - 1
+};
+
+#endif

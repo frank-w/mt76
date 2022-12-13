@@ -754,7 +754,19 @@ enum {
 	RATE_PARAM_FIXED_MCS,
 	RATE_PARAM_FIXED_GI = 11,
 	RATE_PARAM_AUTO = 20,
+#ifdef CONFIG_MTK_VENDOR
+	RATE_PARAM_AUTO_MU = 32,
+#endif
 };
+
+#define RATE_CFG_MODE	GENMASK(15, 8)
+#define RATE_CFG_VAL	GENMASK(7, 0)
+
+/* MURU */
+#define OFDMA_DL                       BIT(0)
+#define OFDMA_UL                       BIT(1)
+#define MUMIMO_DL                      BIT(2)
+#define MUMIMO_UL                      BIT(3)
 
 enum {
 	BF_SOUNDING_ON = 1,
