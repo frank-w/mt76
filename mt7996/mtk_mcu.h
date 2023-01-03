@@ -119,6 +119,348 @@ enum {
 	EDCCA_FCC = 1,
 	EDCCA_ETSI = 2,
 	EDCCA_JAPAN = 3
+
+struct bf_pfmu_tag {
+	__le16 tag;
+	__le16 len;
+
+	u8 pfmu_id;
+	bool bfer;
+	u8 band_idx;
+	u8 __rsv[5];
+	u8 buf[56];
+} __packed;
+
+struct bf_starec_read {
+	__le16 tag;
+	__le16 len;
+
+	__le16 wlan_idx;
+	u8 __rsv[2];
+} __packed;
+
+struct bf_fbk_rpt_info {
+	__le16 tag;
+	__le16 len;
+
+	__le16 wlan_idx; // Only need for dynamic_pfmu_update 0x4
+	u8 action;
+	u8 band_idx;
+	u8 __rsv[4];
+
+} __packed;
+
+struct bf_txsnd_info {
+	__le16 tag;
+	__le16 len;
+
+	u8 action;
+	u8 read_clr;
+	u8 vht_opt;
+	u8 he_opt;
+	__le16 wlan_idx;
+	u8 glo_opt;
+	u8 snd_intv;
+	u8 snd_stop;
+	u8 max_snd_stas;
+	u8 tx_time;
+	u8 mcs;
+	u8 ldpc;
+	u8 inf;
+	u8 man;
+	u8 ac_queue;
+	u8 sxn_protect;
+	u8 direct_fbk;
+	u8 __rsv[2];
+} __packed;
+
+struct mt7996_mcu_bf_basic_event {
+	struct mt7996_mcu_rxd rxd;
+
+	u8 __rsv1[4];
+
+	__le16 tag;
+	__le16 len;
+};
+
+struct mt7996_mcu_bf_starec_read {
+
+	struct mt7996_mcu_bf_basic_event event;
+
+	__le16 pfmu_id;
+	bool is_su_mu;
+	u8 txbf_cap;
+	u8 sounding_phy;
+	u8 ndpa_rate;
+	u8 ndp_rate;
+	u8 rpt_poll_rate;
+	u8 tx_mode;
+	u8 nc;
+	u8 nr;
+	u8 bw;
+	u8 total_mem_require;
+	u8 mem_require_20m;
+	u8 mem_row0;
+	u8 mem_col0:6;
+	u8 mem_row0_msb:2;
+	u8 mem_row1;
+	u8 mem_col1:6;
+	u8 mem_row1_msb:2;
+	u8 mem_row2;
+	u8 mem_col2:6;
+	u8 mem_row2_msb:2;
+	u8 mem_row3;
+	u8 mem_col3:6;
+	u8 mem_row3_msb:2;
+
+	__le16 smart_ant;
+	u8 se_idx;
+	u8 auto_sounding_ctrl;
+
+	u8 bf_timeout;
+	u8 bf_dbw;
+	u8 bf_ncol;
+	u8 bf_nrow;
+
+	u8 nr_lt_bw80;
+	u8 nc_lt_bw80;
+	u8 ru_start_idx;
+	u8 ru_end_idx;
+
+	bool trigger_su;
+	bool trigger_mu;
+
+	bool ng16_su;
+	bool ng16_mu;
+
+	bool codebook42_su;
+	bool codebook75_mu;
+
+	u8 he_ltf;
+	u8 pp_fd_val;
+};
+
+#define TXBF_PFMU_ID_NUM_MAX 48
+
+#define TXBF_PFMU_ID_NUM_MAX_TBTC_BAND0 TXBF_PFMU_ID_NUM_MAX
+#define TXBF_PFMU_ID_NUM_MAX_TBTC_BAND1 TXBF_PFMU_ID_NUM_MAX
+#define TXBF_PFMU_ID_NUM_MAX_TBTC_BAND2 TXBF_PFMU_ID_NUM_MAX
+
+/* CFG_BF_STA_REC shall be varied based on BAND Num */
+#define CFG_BF_STA_REC_NUM (TXBF_PFMU_ID_NUM_MAX_TBTC_BAND0 + TXBF_PFMU_ID_NUM_MAX_TBTC_BAND1 + TXBF_PFMU_ID_NUM_MAX_TBTC_BAND2)
+
+#define BF_SND_CTRL_STA_DWORD_CNT   ((CFG_BF_STA_REC_NUM + 0x1F) >> 5)
+
+#ifndef ALIGN_4
+	#define ALIGN_4(_value)             (((_value) + 3) & ~3u)
+#endif /* ALIGN_4 */
+
+#define CFG_WIFI_RAM_BAND_NUM 3
+
+struct uni_event_bf_txsnd_sta_info {
+	u8 snd_intv;       /* Sounding interval upper bound, unit:15ms */
+	u8 snd_intv_cnt;   /* Sounding interval counter */
+	u8 snd_tx_cnt;     /* Tx sounding count for debug */
+	u8 snd_stop_reason;  /* Bitwise reason to put in Stop Queue */
+};
+
+struct mt7996_mcu_tx_snd_info {
+
+	struct mt7996_mcu_bf_basic_event event;
+
+	u8 vht_opt;
+	u8 he_opt;
+	u8 glo_opt;
+	u8 __rsv;
+	__le32 snd_rec_su_sta[BF_SND_CTRL_STA_DWORD_CNT];
+	__le32 snd_rec_vht_mu_sta[BF_SND_CTRL_STA_DWORD_CNT];
+	__le32 snd_rec_he_tb_sta[BF_SND_CTRL_STA_DWORD_CNT];
+	__le32 snd_rec_eht_tb_sta[BF_SND_CTRL_STA_DWORD_CNT];
+	__le16 wlan_idx_for_mc_snd[ALIGN_4(CFG_WIFI_RAM_BAND_NUM)];
+	__le16 wlan_idx_for_he_tb_snd[ALIGN_4(CFG_WIFI_RAM_BAND_NUM)];
+	__le16 wlan_idx_for_eht_tb_snd[ALIGN_4(CFG_WIFI_RAM_BAND_NUM)];
+	__le16 ul_length;
+	u8 mcs;
+	u8 ldpc;
+	struct uni_event_bf_txsnd_sta_info snd_sta_info[CFG_BF_STA_REC_NUM];
+};
+
+struct mt7996_mcu_txbf_fbk_info {
+
+	struct mt7996_mcu_bf_basic_event event;
+
+	__le32 u4DeQInterval;     /* By ms */
+	__le32 u4PollPFMUIntrStatTimeOut; /* micro-sec */
+	__le32 u4RptPktTimeOutListNum;
+	__le32 u4RptPktListNum;
+	__le32 u4PFMUWRTimeOutCnt;
+	__le32 u4PFMUWRFailCnt;
+	__le32 u4PFMUWRDoneCnt;
+	__le32 u4PFMUWRTimeoutFreeCnt;
+	__le32 u4FbRptPktDropCnt;
+	__le32 au4RxPerStaFbRptCnt[CFG_BF_STA_REC_NUM];
+};
+
+struct pfmu_ru_field {
+	__le32 ru_start_id:7;
+	__le32 _rsv1:1;
+	__le32 ru_end_id:7;
+	__le32 _rsv2:1;
+} __packed;
+
+struct pfmu_partial_bw_info {
+	__le32 partial_bw_info:9;
+	__le32 _rsv1:7;
+} __packed;
+
+struct mt7996_pfmu_tag1 {
+	__le32 pfmu_idx:10;
+	__le32 ebf:1;
+	__le32 data_bw:3;
+	__le32 lm:3;
+	__le32 is_mu:1;
+	__le32 nr:3;
+	__le32 nc:3;
+	__le32 codebook:2;
+	__le32 ngroup:2;
+	__le32 invalid_prof:1;
+	__le32 _rsv:3;
+
+	__le32 col_id1:7, row_id1:9;
+	__le32 col_id2:7, row_id2:9;
+	__le32 col_id3:7, row_id3:9;
+	__le32 col_id4:7, row_id4:9;
+
+	union {
+		struct pfmu_ru_field field;
+		struct pfmu_partial_bw_info bw_info;
+	};
+	__le32 mob_cal_en:1;
+	__le32 _rsv2:3;
+	__le32 mob_ru_alloc:9;	/* EHT profile uses full 9 bit */
+	__le32 _rsv3:3;
+
+	__le32 snr_sts0:8, snr_sts1:8, snr_sts2:8, snr_sts3:8;
+	__le32 snr_sts4:8, snr_sts5:8, snr_sts6:8, snr_sts7:8;
+
+	__le32 _rsv4;
+} __packed;
+
+struct mt7996_pfmu_tag2 {
+	__le32 smart_ant:24;
+	__le32 se_idx:5;
+	__le32 _rsv:3;
+
+	__le32 _rsv1:16;
+	__le32 ibf_timeout:8;
+	__le32 _rsv2:8;
+
+	__le32 ibf_data_bw:3;
+	__le32 ibf_nc:3;
+	__le32 ibf_nr:3;
+	__le32 ibf_ru:9;
+	__le32 _rsv3:14;
+
+	__le32 mob_delta_t:8;
+	__le32 mob_lq_result:7;
+	__le32 _rsv5:1;
+	__le32 _rsv6:16;
+
+	__le32 _rsv7;
+} __packed;
+
+struct mt7996_pfmu_tag_event {
+	struct mt7996_mcu_bf_basic_event event;
+
+	u8 bfer;
+	u8 __rsv[3];
+
+	struct mt7996_pfmu_tag1 t1;
+	struct mt7996_pfmu_tag2 t2;
+};
+
+enum {
+	UNI_EVENT_BF_PFMU_TAG = 0x5,
+	UNI_EVENT_BF_PFMU_DATA = 0x7,
+	UNI_EVENT_BF_STAREC = 0xB,
+	UNI_EVENT_BF_CAL_PHASE = 0xC,
+	UNI_EVENT_BF_FBK_INFO = 0x17,
+	UNI_EVENT_BF_TXSND_INFO = 0x18,
+	UNI_EVENT_BF_PLY_INFO = 0x19,
+	UNI_EVENT_BF_METRIC_INFO = 0x1A,
+	UNI_EVENT_BF_TXCMD_CFG_INFO = 0x1B,
+	UNI_EVENT_BF_SND_CNT_INFO = 0x1D,
+	UNI_EVENT_BF_MAX_NUM
+};
+
+enum {
+	UNI_CMD_MURU_FIXED_RATE_CTRL = 0x11,
+	UNI_CMD_MURU_FIXED_GROUP_RATE_CTRL,
+};
+
+struct uni_muru_mum_set_group_tbl_entry {
+	__le16 wlan_idx0;
+	__le16 wlan_idx1;
+	__le16 wlan_idx2;
+	__le16 wlan_idx3;
+
+	u8 dl_mcs_user0:4;
+	u8 dl_mcs_user1:4;
+	u8 dl_mcs_user2:4;
+	u8 dl_mcs_user3:4;
+	u8 ul_mcs_user0:4;
+	u8 ul_mcs_user1:4;
+	u8 ul_mcs_user2:4;
+	u8 ul_mcs_user3:4;
+
+	u8 num_user:2;
+	u8 rsv:6;
+	u8 nss0:2;
+	u8 nss1:2;
+	u8 nss2:2;
+	u8 nss3:2;
+	u8 ru_alloc;
+	u8 ru_alloc_ext;
+
+	u8 capa;
+	u8 gi;
+	u8 dl_ul;
+	u8 _rsv2;
+};
+
+enum UNI_CMD_MURU_VER_T {
+	UNI_CMD_MURU_VER_LEG = 0,
+	UNI_CMD_MURU_VER_HE,
+	UNI_CMD_MURU_VER_EHT,
+	UNI_CMD_MURU_VER_MAX
+};
+
+#define UNI_MAX_MCS_SUPPORT_HE 11
+#define UNI_MAX_MCS_SUPPORT_EHT 13
+
+enum {
+	RUALLOC_BW20 = 122,
+	RUALLOC_BW40 = 130,
+	RUALLOC_BW80 = 134,
+	RUALLOC_BW160 = 137,
+	RUALLOC_BW320 = 395,
+};
+
+enum {
+	MAX_MODBF_VHT = 0,
+	MAX_MODBF_HE = 2,
+	MAX_MODBF_EHT = 4,
+};
+
+enum {
+	BF_SND_READ_INFO = 0,
+	BF_SND_CFG_OPT,
+	BF_SND_CFG_INTV,
+	BF_SND_STA_STOP,
+	BF_SND_CFG_MAX_STA,
+	BF_SND_CFG_BFRP,
+	BF_SND_CFG_INF,
+	BF_SND_CFG_TXOP_SND
 };
 
 enum {

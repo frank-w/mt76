@@ -770,8 +770,12 @@ enum {
 
 enum {
 	BF_SOUNDING_ON = 1,
+	BF_PFMU_TAG_READ = 5,
+	BF_STA_REC_READ = 11,
 	BF_HW_EN_UPDATE = 17,
 	BF_MOD_EN_CTRL = 20,
+	BF_FBRPT_DBG_INFO_READ = 23,
+	BF_TXSND_INFO = 24,
 };
 
 enum {

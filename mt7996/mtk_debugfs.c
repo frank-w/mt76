@@ -2894,6 +2894,117 @@ static int mt7996_rx_counters(struct seq_file *s, void *data)
 	return 0;
 }
 
+static int
+mt7996_starec_bf_read_set(void *data, u64 wlan_idx)
+{
+	struct mt7996_phy *phy = data;
+
+	return mt7996_mcu_set_txbf_internal(phy, BF_STA_REC_READ, wlan_idx);
+}
+DEFINE_DEBUGFS_ATTRIBUTE(fops_starec_bf_read, NULL,
+			 mt7996_starec_bf_read_set, "%lld\n");
+
+static ssize_t
+mt7996_bf_txsnd_info_set(struct file *file,
+			 const char __user *user_buf,
+			 size_t count, loff_t *ppos)
+{
+	struct mt7996_phy *phy = file->private_data;
+	char buf[40];
+	int ret;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+
+	if (copy_from_user(buf, user_buf, count))
+		return -EFAULT;
+
+	if (count && buf[count - 1] == '\n')
+		buf[count - 1] = '\0';
+	else
+		buf[count] = '\0';
+
+	ret = mt7996_mcu_set_txbf_snd_info(phy, buf);
+
+	if (ret) return -EFAULT;
+
+	return count;
+}
+
+static const struct file_operations fops_bf_txsnd_info = {
+	.write = mt7996_bf_txsnd_info_set,
+	.read = NULL,
+	.open = simple_open,
+	.llseek = default_llseek,
+};
+
+static int
+mt7996_bf_fbk_rpt_set(void *data, u64 wlan_idx)
+{
+	struct mt7996_phy *phy = data;
+
+	return mt7996_mcu_set_txbf_internal(phy, BF_FBRPT_DBG_INFO_READ, wlan_idx);
+}
+DEFINE_DEBUGFS_ATTRIBUTE(fops_bf_fbk_rpt, NULL,
+			 mt7996_bf_fbk_rpt_set, "%lld\n");
+
+static int
+mt7996_bf_pfmu_tag_read_set(void *data, u64 wlan_idx)
+{
+	struct mt7996_phy *phy = data;
+
+	return mt7996_mcu_set_txbf_internal(phy, BF_PFMU_TAG_READ, wlan_idx);
+}
+DEFINE_DEBUGFS_ATTRIBUTE(fops_bf_pfmu_tag_read, NULL,
+			 mt7996_bf_pfmu_tag_read_set, "%lld\n");
+
+static int
+mt7996_muru_fixed_rate_set(void *data, u64 val)
+{
+	struct mt7996_dev *dev = data;
+
+	return mt7996_mcu_set_muru_fixed_rate_enable(dev, UNI_CMD_MURU_FIXED_RATE_CTRL,
+						     val);
+}
+DEFINE_DEBUGFS_ATTRIBUTE(fops_muru_fixed_rate_enable, NULL,
+			 mt7996_muru_fixed_rate_set, "%lld\n");
+
+static ssize_t
+mt7996_muru_fixed_rate_parameter_set(struct file *file,
+				     const char __user *user_buf,
+				     size_t count, loff_t *ppos)
+{
+	struct mt7996_dev *dev = file->private_data;
+	char buf[40];
+	int ret;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+
+	if (copy_from_user(buf, user_buf, count))
+		return -EFAULT;
+
+	if (count && buf[count - 1] == '\n')
+		buf[count - 1] = '\0';
+	else
+		buf[count] = '\0';
+
+
+	ret = mt7996_mcu_set_muru_fixed_rate_parameter(dev, UNI_CMD_MURU_FIXED_GROUP_RATE_CTRL,
+						       buf);
+
+	if (ret) return -EFAULT;
+
+	return count;
+}
+
+static const struct file_operations fops_muru_fixed_group_rate = {
+	.write = mt7996_muru_fixed_rate_parameter_set,
+	.read = NULL,
+	.open = simple_open,
+	.llseek = default_llseek,
+};
+
 int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 {
 	struct mt7996_dev *dev = phy->dev;
@@ -2979,6 +3090,15 @@ int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 	debugfs_create_file("sr_enhanced_enable", 0600, dir, phy, &fops_sr_enhanced_enable);
 	debugfs_create_file("sr_stats", 0400, dir, phy, &mt7996_sr_stats_fops);
 	debugfs_create_file("sr_scene_cond", 0400, dir, phy, &mt7996_sr_scene_cond_fops);
+
+	debugfs_create_file("muru_fixed_rate_enable", 0600, dir, dev,
+			    &fops_muru_fixed_rate_enable);
+	debugfs_create_file("muru_fixed_group_rate", 0600, dir, dev,
+			    &fops_muru_fixed_group_rate);
+	debugfs_create_file("bf_txsnd_info", 0600, dir, phy, &fops_bf_txsnd_info);
+	debugfs_create_file("bf_starec_read", 0600, dir, phy, &fops_starec_bf_read);
+	debugfs_create_file("bf_fbk_rpt", 0600, dir, phy, &fops_bf_fbk_rpt);
+	debugfs_create_file("pfmu_tag_read", 0600, dir, phy, &fops_bf_pfmu_tag_read);
 
 	return 0;
 }

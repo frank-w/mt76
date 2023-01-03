@@ -742,6 +742,11 @@ mt7996_mcu_uni_rx_unsolicited_event(struct mt7996_dev *dev, struct sk_buff *skb)
 		mt7996_tm_rf_test_event(dev, skb);
 		break;
 #endif
+#if defined CONFIG_NL80211_TESTMODE || defined CONFIG_MTK_DEBUG
+	case MCU_UNI_EVENT_BF:
+		mt7996_mcu_rx_bf_event(dev, skb);
+		break;
+#endif
 	default:
 		break;
 	}
