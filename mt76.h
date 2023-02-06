@@ -200,6 +200,7 @@ struct mt76_queue_entry {
 	};
 	union {
 		struct mt76_txwi_cache *txwi;
+		struct mt76_rxwi_cache *rxwi;
 		struct urb *urb;
 		int buf_sz;
 	};
@@ -410,12 +411,16 @@ struct mt76_txwi_cache {
 	struct list_head list;
 	dma_addr_t dma_addr;
 
-	union {
-		struct sk_buff *skb;
-		void *ptr;
-	};
-
 	unsigned long jiffies;
+
+	struct sk_buff *skb;
+};
+
+struct mt76_rxwi_cache {
+	struct list_head list;
+	dma_addr_t dma_addr;
+
+	void *ptr;
 };
 
 struct mt76_rx_tid {
@@ -503,6 +508,7 @@ struct mt76_driver_ops {
 	u16 txwi_size;
 	u16 token_size;
 	u8 mcs_rates;
+	u16 rx_token_size;
 
 	void (*update_survey)(struct mt76_phy *phy);
 
@@ -880,7 +886,6 @@ struct mt76_dev {
 
 	struct ieee80211_hw *hw;
 
-	spinlock_t wed_lock;
 	spinlock_t lock;
 	spinlock_t cc_lock;
 
@@ -1547,8 +1552,8 @@ mt76_tx_status_get_hw(struct mt76_dev *dev, struct sk_buff *skb)
 }
 
 void mt76_put_txwi(struct mt76_dev *dev, struct mt76_txwi_cache *t);
-void mt76_put_rxwi(struct mt76_dev *dev, struct mt76_txwi_cache *t);
-struct mt76_txwi_cache *mt76_get_rxwi(struct mt76_dev *dev);
+void mt76_put_rxwi(struct mt76_dev *dev, struct mt76_rxwi_cache *r);
+struct mt76_rxwi_cache *mt76_get_rxwi(struct mt76_dev *dev);
 void mt76_free_pending_rxwi(struct mt76_dev *dev);
 void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 		      struct napi_struct *napi);
@@ -1734,9 +1739,9 @@ struct mt76_txwi_cache *
 mt76_token_release(struct mt76_dev *dev, int token, bool *wake);
 int mt76_token_consume(struct mt76_dev *dev, struct mt76_txwi_cache **ptxwi);
 void __mt76_set_tx_blocked(struct mt76_dev *dev, bool blocked);
-struct mt76_txwi_cache *mt76_rx_token_release(struct mt76_dev *dev, int token);
+struct mt76_rxwi_cache *mt76_rx_token_release(struct mt76_dev *dev, int token);
 int mt76_rx_token_consume(struct mt76_dev *dev, void *ptr,
-			  struct mt76_txwi_cache *r, dma_addr_t phys);
+			  struct mt76_rxwi_cache *r, dma_addr_t phys);
 
 static inline void mt76_set_tx_blocked(struct mt76_dev *dev, bool blocked)
 {

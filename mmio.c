@@ -89,28 +89,45 @@ EXPORT_SYMBOL_GPL(mt76_set_irq_mask);
 void mt76_mmio_wed_release_rx_buf(struct mtk_wed_device *wed)
 {
 	struct mt76_dev *dev = container_of(wed, struct mt76_dev, mmio.wed);
-	u32 length;
+	struct page *page;
 	int i;
 
-	length = SKB_DATA_ALIGN(NET_SKB_PAD + wed->wlan.rx_size +
-				sizeof(struct skb_shared_info));
-
 	for (i = 0; i < dev->rx_token_size; i++) {
-		struct mt76_txwi_cache *t;
+		struct mt76_rxwi_cache *r;
 
-		t = mt76_rx_token_release(dev, i);
-		if (!t || !t->ptr)
+		r = mt76_rx_token_release(dev, i);
+		if (!r || !r->ptr)
 			continue;
 
-		dma_unmap_single(dev->dma_dev, t->dma_addr,
+		dma_unmap_single(dev->dma_dev, r->dma_addr,
 				 wed->wlan.rx_size, DMA_FROM_DEVICE);
-		__free_pages(virt_to_page(t->ptr), get_order(length));
-		t->ptr = NULL;
+		skb_free_frag(r->ptr);
+		r->ptr = NULL;
 
-		mt76_put_rxwi(dev, t);
+		mt76_put_rxwi(dev, r);
 	}
 
 	mt76_free_pending_rxwi(dev);
+
+	mt76_for_each_q_rx(dev, i) {
+		struct mt76_queue *q = &dev->q_rx[i];
+
+		if (mt76_queue_is_wed_rx(q)) {
+			if (!q->rx_page.va)
+				continue;
+
+			page = virt_to_page(q->rx_page.va);
+			__page_frag_cache_drain(page, q->rx_page.pagecnt_bias);
+			memset(&q->rx_page, 0, sizeof(q->rx_page));
+		}
+	}
+
+	if (!wed->rx_buf_ring.rx_page.va)
+		return;
+
+	page = virt_to_page(wed->rx_buf_ring.rx_page.va);
+	__page_frag_cache_drain(page, wed->rx_buf_ring.rx_page.pagecnt_bias);
+	memset(&wed->rx_buf_ring.rx_page, 0, sizeof(wed->rx_buf_ring.rx_page));
 }
 EXPORT_SYMBOL_GPL(mt76_mmio_wed_release_rx_buf);
 
@@ -125,18 +142,18 @@ u32 mt76_mmio_wed_init_rx_buf(struct mtk_wed_device *wed, int size)
 				sizeof(struct skb_shared_info));
 
 	for (i = 0; i < size; i++) {
-		struct mt76_txwi_cache *t = mt76_get_rxwi(dev);
+		struct mt76_rxwi_cache *r = mt76_get_rxwi(dev);
 		dma_addr_t addr;
 		struct page *page;
 		int token;
 		void *ptr;
 
-		if (!t)
+		if (!r)
 			goto unmap;
 
-		page = __dev_alloc_pages(GFP_KERNEL, get_order(length));
-		if (!page) {
-			mt76_put_rxwi(dev, t);
+		ptr = page_frag_alloc(&wed->rx_buf_ring.rx_page, length, GFP_ATOMIC);
+		if (!ptr) {
+			mt76_put_rxwi(dev, r);
  			goto unmap;
 		}
 
@@ -146,17 +163,17 @@ u32 mt76_mmio_wed_init_rx_buf(struct mtk_wed_device *wed, int size)
 
 		if (unlikely(dma_mapping_error(dev->dev, addr))) {
 			skb_free_frag(ptr);
-			mt76_put_rxwi(dev, t);
+			mt76_put_rxwi(dev, r);
 			goto unmap;
 		}
 
 		desc->buf0 = cpu_to_le32(addr);
-		token = mt76_rx_token_consume(dev, ptr, t, addr);
+		token = mt76_rx_token_consume(dev, ptr, r, addr);
 		if (token < 0) {
 			dma_unmap_single(dev->dma_dev, addr,
 					 wed->wlan.rx_size, DMA_TO_DEVICE);
-			__free_pages(page, get_order(length));
-			mt76_put_rxwi(dev, t);
+			skb_free_frag(ptr);
+			mt76_put_rxwi(dev, r);
 			goto unmap;
 		}
 

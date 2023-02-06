@@ -680,7 +680,7 @@ int mt7915_mmio_wed_init(struct mt7915_dev *dev, void *pdev_ptr,
 	wed->wlan.reset = mt7915_mmio_wed_reset;
 	wed->wlan.reset_complete = mt76_mmio_wed_reset_complete;
 
-	dev->mt76.rx_token_size = wed->wlan.rx_npkt;
+	dev->mt76.rx_token_size += wed->wlan.rx_npkt;
 
 	if (mtk_wed_device_attach(wed))
 		return 0;
@@ -886,6 +886,7 @@ struct mt7915_dev *mt7915_mmio_probe(struct device *pdev,
 				SURVEY_INFO_TIME_RX |
 				SURVEY_INFO_TIME_BSS_RX,
 		.token_size = MT7915_TOKEN_SIZE,
+		.rx_token_size = MT7915_RX_TOKEN_SIZE;
 		.tx_prepare_skb = mt7915_tx_prepare_skb,
 		.tx_complete_skb = mt76_connac_tx_complete_skb,
 		.rx_skb = mt7915_queue_rx_skb,

@@ -851,16 +851,16 @@ int mt76_token_consume(struct mt76_dev *dev, struct mt76_txwi_cache **ptxwi)
 EXPORT_SYMBOL_GPL(mt76_token_consume);
 
 int mt76_rx_token_consume(struct mt76_dev *dev, void *ptr,
-			  struct mt76_txwi_cache *t, dma_addr_t phys)
+			  struct mt76_rxwi_cache *r, dma_addr_t phys)
 {
 	int token;
 
 	spin_lock_bh(&dev->rx_token_lock);
-	token = idr_alloc(&dev->rx_token, t, 0, dev->rx_token_size,
+	token = idr_alloc(&dev->rx_token, r, 0, dev->rx_token_size,
 			  GFP_ATOMIC);
 	if (token >= 0) {
-		t->ptr = ptr;
-		t->dma_addr = phys;
+		r->ptr = ptr;
+		r->dma_addr = phys;
 	}
 	spin_unlock_bh(&dev->rx_token_lock);
 
@@ -897,15 +897,15 @@ mt76_token_release(struct mt76_dev *dev, int token, bool *wake)
 }
 EXPORT_SYMBOL_GPL(mt76_token_release);
 
-struct mt76_txwi_cache *
+struct mt76_rxwi_cache *
 mt76_rx_token_release(struct mt76_dev *dev, int token)
 {
-	struct mt76_txwi_cache *t;
+	struct mt76_rxwi_cache *r;
 
 	spin_lock_bh(&dev->rx_token_lock);
-	t = idr_remove(&dev->rx_token, token);
+	r = idr_remove(&dev->rx_token, token);
 	spin_unlock_bh(&dev->rx_token_lock);
 
-	return t;
+	return r;
 }
 EXPORT_SYMBOL_GPL(mt76_rx_token_release);
