@@ -250,6 +250,11 @@ static inline bool is_connac_v1(struct mt76_dev *dev)
 	return is_mt7615(dev) || is_mt7663(dev) || is_mt7622(dev);
 }
 
+static inline bool is_connac_v3(struct mt76_dev *dev)
+{
+	return is_mt7996(dev);
+}
+
 static inline bool is_mt76_fw_txp(struct mt76_dev *dev)
 {
 	switch (mt76_chip(dev)) {
