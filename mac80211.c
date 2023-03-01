@@ -846,7 +846,8 @@ void mt76_rx(struct mt76_dev *dev, enum mt76_rxq_id q, struct sk_buff *skb)
 	}
 
 #ifdef CONFIG_NL80211_TESTMODE
-	if (phy->test.state == MT76_TM_STATE_RX_FRAMES) {
+	if (!(phy->test.flag & MT_TM_FW_RX_COUNT) &&
+	    phy->test.state == MT76_TM_STATE_RX_FRAMES) {
 		phy->test.rx_stats.packets[q]++;
 		if (status->flag & RX_FLAG_FAILED_FCS_CRC)
 			phy->test.rx_stats.fcs_error[q]++;

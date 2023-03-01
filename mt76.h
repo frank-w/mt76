@@ -694,13 +694,20 @@ struct mt76_testmode_ops {
 	int (*set_params)(struct mt76_phy *phy, struct nlattr **tb,
 			  enum mt76_testmode_state new_state);
 	int (*dump_stats)(struct mt76_phy *phy, struct sk_buff *msg);
+	void (*reset_rx_stats)(struct mt76_phy *phy);
+	void (*tx_stop)(struct mt76_phy *phy);
+	int (*set_eeprom)(struct mt76_phy *phy, u32 offset, u8 *val, u8 action);
 };
+
+#define MT_TM_FW_RX_COUNT	BIT(0)
 
 struct mt76_testmode_data {
 	enum mt76_testmode_state state;
 
 	u32 param_set[DIV_ROUND_UP(NUM_MT76_TM_ATTRS, 32)];
 	struct sk_buff *tx_skb;
+
+	u8 sku_en;
 
 	u32 tx_count;
 	u16 tx_mpdu_len;
@@ -711,6 +718,7 @@ struct mt76_testmode_data {
 	u8 tx_rate_sgi;
 	u8 tx_rate_ldpc;
 	u8 tx_rate_stbc;
+	u16 tx_preamble_puncture;
 	u8 tx_ltf;
 
 	u8 tx_antenna_mask;
@@ -719,6 +727,9 @@ struct mt76_testmode_data {
 	u8 tx_duty_cycle;
 	u32 tx_time;
 	u32 tx_ipg;
+
+	bool ibf;
+	bool ebf;
 
 	u32 freq_offset;
 
@@ -734,7 +745,16 @@ struct mt76_testmode_data {
 	struct {
 		u64 packets[__MT_RXQ_MAX];
 		u64 fcs_error[__MT_RXQ_MAX];
+		u64 len_mismatch;
 	} rx_stats;
+	u8 flag;
+
+	struct {
+		u8 type;
+		u8 enable;
+	} cfg;
+
+	u8 aid;
 };
 
 struct mt76_vif {
@@ -1422,6 +1442,22 @@ int mt76_testmode_dump(struct ieee80211_hw *hw, struct sk_buff *skb,
 		       struct netlink_callback *cb, void *data, int len);
 int mt76_testmode_set_state(struct mt76_phy *phy, enum mt76_testmode_state state);
 int mt76_testmode_alloc_skb(struct mt76_phy *phy, u32 len);
+
+static inline void
+mt76_testmode_param_set(struct mt76_testmode_data *td, u16 idx)
+{
+#ifdef CONFIG_NL80211_TESTMODE
+	td->param_set[idx / 32] |= BIT(idx % 32);
+#endif
+}
+
+static inline bool
+mt76_testmode_param_present(struct mt76_testmode_data *td, u16 idx)
+{
+#ifdef CONFIG_NL80211_TESTMODE
+	return td->param_set[idx / 32] & BIT(idx % 32);
+#endif
+}
 
 static inline void mt76_testmode_reset(struct mt76_phy *phy, bool disable)
 {

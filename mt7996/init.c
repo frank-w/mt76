@@ -966,6 +966,10 @@ static int mt7996_init_hardware(struct mt7996_dev *dev)
 
 	set_bit(MT76_STATE_INITIALIZED, &dev->mphy.state);
 
+	ret = mt7996_eeprom_check_fw_mode(dev);
+	if (ret < 0)
+		return ret;
+
 	ret = mt7996_mcu_init(dev);
 	if (ret)
 		return ret;
@@ -1383,6 +1387,10 @@ int mt7996_register_device(struct mt7996_dev *dev)
 		return ret;
 
 	mt7996_init_wiphy(hw, &dev->mt76.mmio.wed);
+
+#ifdef CONFIG_NL80211_TESTMODE
+	dev->mt76.test_ops = &mt7996_testmode_ops;
+#endif
 
 	ret = mt76_register_device(&dev->mt76, true, mt76_rates,
 				   ARRAY_SIZE(mt76_rates));

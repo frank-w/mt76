@@ -157,6 +157,16 @@ struct mt7996_mcu_eeprom {
 	__le16 buf_len;
 } __packed;
 
+struct mt7996_mcu_eeprom_info {
+	u8 _rsv[4];
+
+	__le16 tag;
+	__le16 len;
+	__le32 addr;
+	__le32 valid;
+	u8 data[MT7996_EEPROM_BLOCK_SIZE];
+} __packed;
+
 struct mt7996_mcu_phy_rx_info {
 	u8 category;
 	u8 rate;
@@ -889,8 +899,31 @@ enum {
 	UNI_CMD_THERMAL_PROTECT_DUTY_CONFIG,
 };
 
+struct tx_power_ctrl {
+	u8 _rsv[4];
+
+	__le16 tag;
+	__le16 len;
+
+	u8 power_ctrl_id;
+	union {
+		bool sku_enable;
+		bool ate_mode_enable;
+		bool percentage_ctrl_enable;
+		bool bf_backoff_enable;
+		u8 power_drop_level;
+	};
+	u8 band_idx;
+	u8 rsv[1];
+} __packed;
+
 enum {
+	UNI_TXPOWER_SKU_POWER_LIMIT_CTRL = 0,
+	UNI_TXPOWER_PERCENTAGE_CTRL = 1,
+	UNI_TXPOWER_PERCENTAGE_DROP_CTRL = 2,
+	UNI_TXPOWER_BACKOFF_POWER_LIMIT_CTRL = 3,
 	UNI_TXPOWER_POWER_LIMIT_TABLE_CTRL = 4,
+	UNI_TXPOWER_ATE_MODE_CTRL = 6,
 };
 
 enum {

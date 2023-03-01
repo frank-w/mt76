@@ -685,7 +685,8 @@ mt7996_mac_fill_rx(struct mt7996_dev *dev, enum mt76_rxq_id q,
 				     *info);
 	}
 
-	if (rxv && mode >= MT_PHY_TYPE_HE_SU && !(status->flag & RX_FLAG_8023))
+	if (rxv && mode >= MT_PHY_TYPE_HE_SU && mode < MT_PHY_TYPE_EHT_SU &&
+	    !(status->flag & RX_FLAG_8023))
 		mt76_connac3_mac_decode_he_radiotap(skb, rxv, mode);
 
 	if (!status->wcid || !ieee80211_is_data_qos(fc) || hw_aggr)

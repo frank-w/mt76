@@ -23,6 +23,18 @@ static bool mt7996_dev_running(struct mt7996_dev *dev)
 	return phy && test_bit(MT76_STATE_RUNNING, &phy->mt76->state);
 }
 
+static void mt7996_testmode_disable_all(struct mt7996_dev *dev)
+{
+	struct mt7996_phy *phy;
+	int i;
+
+	for (i = 0; i < __MT_MAX_BAND; i++) {
+		phy = __mt7996_phy(dev, i);
+		if (phy)
+			mt76_testmode_set_state(phy->mt76, MT76_TM_STATE_OFF);
+	}
+}
+
 int mt7996_run(struct ieee80211_hw *hw)
 {
 	struct mt7996_dev *dev = mt7996_hw_dev(hw);
@@ -36,6 +48,8 @@ int mt7996_run(struct ieee80211_hw *hw)
 		if (ret)
 			goto out;
 	}
+
+	mt7996_testmode_disable_all(dev);
 
 	mt7996_mac_enable_nf(dev, phy->mt76->band_idx);
 
@@ -291,6 +305,11 @@ int mt7996_set_channel(struct mt7996_phy *phy)
 
 	mt76_set_channel(phy->mt76);
 
+	if (mt76_testmode_enabled(phy->mt76) || phy->mt76->test.bf_en) {
+		mt7996_tm_update_channel(phy);
+		goto out;
+	}
+
 	ret = mt7996_mcu_set_chan_info(phy, UNI_CHANNEL_SWITCH);
 	if (ret)
 		goto out;
@@ -398,6 +417,11 @@ static int mt7996_config(struct ieee80211_hw *hw, u32 changed)
 	int ret;
 
 	if (changed & IEEE80211_CONF_CHANGE_CHANNEL) {
+		if (!mt76_testmode_enabled(phy->mt76) && !phy->mt76->test.bf_en) {
+			ret = mt7996_mcu_edcca_enable(phy, true);
+			if (ret)
+				return ret;
+		}
 		ieee80211_stop_queues(hw);
 		ret = mt7996_set_channel(phy);
 		if (ret)
@@ -1507,6 +1531,8 @@ const struct ieee80211_ops mt7996_ops = {
 	.sta_set_decap_offload = mt7996_sta_set_decap_offload,
 	.add_twt_setup = mt7996_mac_add_twt_setup,
 	.twt_teardown_request = mt7996_twt_teardown_request,
+	CFG80211_TESTMODE_CMD(mt76_testmode_cmd)
+	CFG80211_TESTMODE_DUMP(mt76_testmode_dump)
 #ifdef CONFIG_MAC80211_DEBUGFS
 	.sta_add_debugfs = mt7996_sta_add_debugfs,
 #endif
