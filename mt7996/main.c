@@ -321,6 +321,12 @@ int mt7996_set_channel(struct mt7996_phy *phy)
 
 	mt76_set_channel(phy->mt76);
 
+	if (dev->flash_mode) {
+		ret = mt7996_mcu_apply_tx_dpd(phy);
+		if (ret)
+			goto out;
+	}
+
 	if (mt76_testmode_enabled(phy->mt76) || phy->mt76->test.bf_en) {
 		mt7996_tm_update_channel(phy);
 		goto out;

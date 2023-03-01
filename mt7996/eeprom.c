@@ -449,6 +449,10 @@ int mt7996_eeprom_init(struct mt7996_dev *dev)
 			return ret;
 	}
 
+	ret = mt7996_eeprom_load_precal(dev);
+	if (ret)
+		return ret;
+
 	ret = mt7996_eeprom_parse_hw_cap(dev, &dev->phy);
 	if (ret < 0)
 		return ret;
