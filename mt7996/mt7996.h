@@ -289,6 +289,7 @@ struct mt7996_phy {
 
 	struct mt76_mib_stats mib;
 	struct mt76_channel_state state_ts;
+	struct delayed_work ipi_work;
 
 	bool has_aux_rx;
 

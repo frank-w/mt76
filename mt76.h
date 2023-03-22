@@ -777,6 +777,14 @@ struct mt76_testmode_data {
 	} cfg;
 
 	u8 aid;
+
+	u8 offchan_ch;
+	u8 offchan_center_ch;
+	u8 offchan_bw;
+
+	u8 ipi_threshold;
+	u32 ipi_period;
+	u8 ipi_reset;
 };
 
 struct mt76_vif {

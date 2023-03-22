@@ -27,9 +27,15 @@ enum {
 	FW_CDBW_8080MHZ,
 };
 
+#define FIRST_CONTROL_CHAN_BITMAP_BW40		0x5555555
+#define FIRST_CONTROL_CHAN_BITMAP_BW80		0x111111
+#define FIRST_CONTROL_CHAN_BITMAP_BW160		0x100101
+
 enum bw_mapping_method {
 	BW_MAP_NL_TO_FW,
 	BW_MAP_NL_TO_TM,
+	BW_MAP_NL_TO_MHZ,
+	BW_MAP_NL_TO_CONTROL_BITMAP_5G,
 
 	NUM_BW_MAP,
 };
@@ -310,6 +316,44 @@ struct mt7996_tm_rx_event {
 	union {
 		struct mt7996_tm_rx_event_stat_all rx_stat_all;
 	};
+} __packed;
+
+enum {
+	RDD_SET_IPI_CR_INIT,		/* CR initialization */
+	RDD_SET_IPI_HIST_RESET,		/* Reset IPI histogram counter */
+	RDD_SET_IDLE_POWER,		/* Idle power info */
+	RDD_SET_IPI_HIST_NUM
+};
+
+enum {
+	RDD_IPI_HIST_0,			/* IPI count for power <= -92 (dBm) */
+	RDD_IPI_HIST_1,			/* IPI count for -92 < power <= -89 (dBm) */
+	RDD_IPI_HIST_2,			/* IPI count for -89 < power <= -86 (dBm) */
+	RDD_IPI_HIST_3,			/* IPI count for -86 < power <= -83 (dBm) */
+	RDD_IPI_HIST_4,			/* IPI count for -83 < power <= -80 (dBm) */
+	RDD_IPI_HIST_5,			/* IPI count for -80 < power <= -75 (dBm) */
+	RDD_IPI_HIST_6,			/* IPI count for -75 < power <= -70 (dBm) */
+	RDD_IPI_HIST_7,			/* IPI count for -70 < power <= -65 (dBm) */
+	RDD_IPI_HIST_8,			/* IPI count for -65 < power <= -60 (dBm) */
+	RDD_IPI_HIST_9,			/* IPI count for -60 < power <= -55 (dBm) */
+	RDD_IPI_HIST_10,		/* IPI count for -55 < power        (dBm) */
+	RDD_IPI_FREE_RUN_CNT,		/* IPI count for counter++ per 8 us */
+	RDD_IPI_HIST_ALL_CNT,		/* Get all IPI */
+	RDD_IPI_HIST_0_TO_10_CNT,	/* Get IPI histogram 0 to 10 */
+	RDD_IPI_HIST_2_TO_10_CNT,	/* Get IPI histogram 2 to 10 */
+	RDD_TX_ASSERT_TIME,		/* Get band 1 TX assert time */
+	RDD_IPI_HIST_NUM
+};
+
+#define POWER_INDICATE_HIST_MAX		RDD_IPI_FREE_RUN_CNT
+#define IPI_HIST_TYPE_NUM		(POWER_INDICATE_HIST_MAX + 1)
+
+struct mt7996_tm_rdd_ipi_ctrl {
+	u8 ipi_hist_idx;
+	u8 band_idx;
+	u8 rsv[2];
+	__le32 ipi_hist_val[IPI_HIST_TYPE_NUM];
+	__le32 tx_assert_time;		/* unit: us */
 } __packed;
 
 #endif
