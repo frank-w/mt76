@@ -911,6 +911,7 @@ struct tx_power_ctrl {
 		bool ate_mode_enable;
 		bool percentage_ctrl_enable;
 		bool bf_backoff_enable;
+		u8 show_info_category;
 		u8 power_drop_level;
 	};
 	u8 band_idx;
@@ -924,6 +925,7 @@ enum {
 	UNI_TXPOWER_BACKOFF_POWER_LIMIT_CTRL = 3,
 	UNI_TXPOWER_POWER_LIMIT_TABLE_CTRL = 4,
 	UNI_TXPOWER_ATE_MODE_CTRL = 6,
+	UNI_TXPOWER_SHOW_INFO = 7,
 };
 
 enum {

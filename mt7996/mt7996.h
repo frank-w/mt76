@@ -609,6 +609,7 @@ int mt7996_mcu_set_tx_power_ctrl(struct mt7996_phy *phy, u8 power_ctrl_id, u8 da
 #ifdef CONFIG_NL80211_TESTMODE
 void mt7996_tm_rf_test_event(struct mt7996_dev *dev, struct sk_buff *skb);
 #endif
+int mt7996_mcu_get_tx_power_info(struct mt7996_phy *phy, u8 category, void *event);
 int mt7996_mcu_set_scs(struct mt7996_phy *phy, u8 enable);
 void mt7996_mcu_scs_sta_poll(struct work_struct *work);
 

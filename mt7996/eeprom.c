@@ -404,3 +404,37 @@ s8 mt7996_eeprom_get_power_delta(struct mt7996_dev *dev, int band)
 
 	return val & MT_EE_RATE_DELTA_SIGN ? delta : -delta;
 }
+
+const u8 mt7996_sku_group_len[] = {
+	[SKU_CCK] = 4,
+	[SKU_OFDM] = 8,
+	[SKU_HT20] = 8,
+	[SKU_HT40] = 9,
+	[SKU_VHT20] = 12,
+	[SKU_VHT40] = 12,
+	[SKU_VHT80] = 12,
+	[SKU_VHT160] = 12,
+	[SKU_HE26] = 12,
+	[SKU_HE52] = 12,
+	[SKU_HE106] = 12,
+	[SKU_HE242] = 12,
+	[SKU_HE484] = 12,
+	[SKU_HE996] = 12,
+	[SKU_HE2x996] = 12,
+	[SKU_EHT26] = 16,
+	[SKU_EHT52] = 16,
+	[SKU_EHT106] = 16,
+	[SKU_EHT242] = 16,
+	[SKU_EHT484] = 16,
+	[SKU_EHT996] = 16,
+	[SKU_EHT2x996] = 16,
+	[SKU_EHT4x996] = 16,
+	[SKU_EHT26_52] = 16,
+	[SKU_EHT26_106] = 16,
+	[SKU_EHT484_242] = 16,
+	[SKU_EHT996_484] = 16,
+	[SKU_EHT996_484_242] = 16,
+	[SKU_EHT2x996_484] = 16,
+	[SKU_EHT3x996] = 16,
+	[SKU_EHT3x996_484] = 16,
+};
