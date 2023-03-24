@@ -26,7 +26,7 @@ static const char *debugfs_path(const char *phyname, const char *file)
 	return path;
 }
 
-static int mt76_set_fwlog_en(const char *phyname, bool en)
+static int mt76_set_fwlog_en(const char *phyname, bool en, char *val)
 {
 	FILE *f = fopen(debugfs_path(phyname, "fw_debug_bin"), "w");
 
@@ -35,7 +35,13 @@ static int mt76_set_fwlog_en(const char *phyname, bool en)
 		return 1;
 	}
 
-	fprintf(f, "7");
+	if (en && val)
+		fprintf(f, "%s", val);
+	else if (en)
+		fprintf(f, "7");
+	else
+		fprintf(f, "0");
+
 	fclose(f);
 
 	return 0;
@@ -76,6 +82,7 @@ static void handle_signal(int sig)
 
 int mt76_fwlog(const char *phyname, int argc, char **argv)
 {
+#define BUF_SIZE 1504
 	struct sockaddr_in local = {
 		.sin_family = AF_INET,
 		.sin_addr.s_addr = INADDR_ANY,
@@ -84,9 +91,9 @@ int mt76_fwlog(const char *phyname, int argc, char **argv)
 		.sin_family = AF_INET,
 		.sin_port = htons(55688),
 	};
-	char buf[1504];
+	char *buf = calloc(BUF_SIZE, sizeof(char));
 	int ret = 0;
-	int yes = 1;
+	/* int yes = 1; */
 	int s, fd;
 
 	if (argc < 1) {
@@ -105,13 +112,13 @@ int mt76_fwlog(const char *phyname, int argc, char **argv)
 		return 1;
 	}
 
-	setsockopt(s, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes));
+	/* setsockopt(s, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes)); */
 	if (bind(s, (struct sockaddr *)&local, sizeof(local)) < 0) {
 		perror("bind");
 		return 1;
 	}
 
-	if (mt76_set_fwlog_en(phyname, true))
+	if (mt76_set_fwlog_en(phyname, true, argv[1]))
 		return 1;
 
 	fd = open(debugfs_path(phyname, "fwlog_data"), O_RDONLY);
@@ -145,8 +152,8 @@ int mt76_fwlog(const char *phyname, int argc, char **argv)
 		if (!r)
 			continue;
 
-		if (len > sizeof(buf)) {
-			fprintf(stderr, "Length error: %d > %d\n", len, (int)sizeof(buf));
+		if (len > BUF_SIZE) {
+			fprintf(stderr, "Length error: %d > %d\n", len, BUF_SIZE);
 			ret = 1;
 			break;
 		}
@@ -171,7 +178,7 @@ int mt76_fwlog(const char *phyname, int argc, char **argv)
 	close(fd);
 
 out:
-	mt76_set_fwlog_en(phyname, false);
+	mt76_set_fwlog_en(phyname, false, NULL);
 
 	return ret;
 }

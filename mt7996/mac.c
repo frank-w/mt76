@@ -936,6 +936,9 @@ int mt7996_tx_prepare_skb(struct mt76_dev *mdev, void *txwi_ptr,
 	id = mt76_token_consume(mdev, &t);
 	if (id < 0)
 		return id;
+#ifdef CONFIG_MTK_DEBUG
+	t->jiffies = jiffies;
+#endif
 
 	pid = mt76_tx_status_skb_add(mdev, wcid, tx_info->skb);
 	memset(txwi_ptr, 0, MT_TXD_SIZE);

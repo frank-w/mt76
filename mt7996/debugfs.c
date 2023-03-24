@@ -290,11 +290,39 @@ mt7996_fw_debug_wm_set(void *data, u64 val)
 		DEBUG_SPL,
 		DEBUG_RPT_RX,
 		DEBUG_RPT_RA = 68,
-	} debug;
+		DEBUG_IDS_SND = 84,
+		DEBUG_IDS_PP = 93,
+		DEBUG_IDS_RA = 94,
+		DEBUG_IDS_BF = 95,
+		DEBUG_IDS_SR = 96,
+		DEBUG_IDS_RU = 97,
+		DEBUG_IDS_MUMIMO = 98,
+		DEBUG_IDS_ERR_LOG = 101,
+	};
+	u8 debug_category[] = {
+		DEBUG_TXCMD,
+		DEBUG_CMD_RPT_TX,
+		DEBUG_CMD_RPT_TRIG,
+		DEBUG_SPL,
+		DEBUG_RPT_RX,
+		DEBUG_RPT_RA,
+		DEBUG_IDS_SND,
+		DEBUG_IDS_PP,
+		DEBUG_IDS_RA,
+		DEBUG_IDS_BF,
+		DEBUG_IDS_SR,
+		DEBUG_IDS_RU,
+		DEBUG_IDS_MUMIMO,
+		DEBUG_IDS_ERR_LOG,
+	};
 	bool tx, rx, en;
 	int ret;
+	u8 i;
 
 	dev->fw_debug_wm = val ? MCU_FW_LOG_TO_HOST : 0;
+#ifdef CONFIG_MTK_DEBUG
+	dev->fw_debug_wm = val;
+#endif
 
 	if (dev->fw_debug_bin)
 		val = MCU_FW_LOG_RELAY;
@@ -309,18 +337,21 @@ mt7996_fw_debug_wm_set(void *data, u64 val)
 	if (ret)
 		return ret;
 
-	for (debug = DEBUG_TXCMD; debug <= DEBUG_RPT_RA; debug++) {
-		if (debug == 67)
-			continue;
-
-		if (debug == DEBUG_RPT_RX)
+	for (i = 0; i < ARRAY_SIZE(debug_category); i++) {
+		if (debug_category[i] == DEBUG_RPT_RX)
 			val = en && rx;
 		else
 			val = en && tx;
 
-		ret = mt7996_mcu_fw_dbg_ctrl(dev, debug, val);
+		ret = mt7996_mcu_fw_dbg_ctrl(dev, debug_category[i], val);
 		if (ret)
 			return ret;
+
+		if (debug_category[i] == DEBUG_IDS_SND && en) {
+			ret = mt7996_mcu_fw_dbg_ctrl(dev, debug_category[i], 2);
+			if (ret)
+				return ret;
+		}
 	}
 
 	return 0;
@@ -401,11 +432,12 @@ mt7996_fw_debug_bin_set(void *data, u64 val)
 	};
 	struct mt7996_dev *dev = data;
 
-	if (!dev->relay_fwlog)
+	if (!dev->relay_fwlog) {
 		dev->relay_fwlog = relay_open("fwlog_data", dev->debugfs_dir,
 					      1500, 512, &relay_cb, NULL);
-	if (!dev->relay_fwlog)
-		return -ENOMEM;
+		if (!dev->relay_fwlog)
+			return -ENOMEM;
+	}
 
 	dev->fw_debug_bin = val;
 
@@ -819,6 +851,11 @@ int mt7996_init_debugfs(struct mt7996_phy *phy)
 	if (phy == &dev->phy)
 		dev->debugfs_dir = dir;
 
+#ifdef CONFIG_MTK_DEBUG
+	debugfs_create_u16("wlan_idx", 0600, dir, &dev->wlan_idx);
+	mt7996_mtk_init_debugfs(phy, dir);
+#endif
+
 	return 0;
 }
 
@@ -831,6 +868,12 @@ mt7996_debugfs_write_fwlog(struct mt7996_dev *dev, const void *hdr, int hdrlen,
 	void *dest;
 
 	spin_lock_irqsave(&lock, flags);
+
+	if (!dev->relay_fwlog) {
+		spin_unlock_irqrestore(&lock, flags);
+		return;
+	}
+
 	dest = relay_reserve(dev->relay_fwlog, hdrlen + len + 4);
 	if (dest) {
 		*(u32 *)dest = hdrlen + len;
@@ -862,9 +905,6 @@ void mt7996_debugfs_rx_fw_monitor(struct mt7996_dev *dev, const void *data, int 
 		.magic = cpu_to_le32(FW_BIN_LOG_MAGIC),
 		.msg_type = cpu_to_le16(PKT_TYPE_RX_FW_MONITOR),
 	};
-
-	if (!dev->relay_fwlog)
-		return;
 
 	hdr.serial_id = cpu_to_le16(dev->fw_debug_seq++);
 	hdr.timestamp = cpu_to_le32(mt76_rr(dev, MT_LPON_FRCR(0)));

@@ -195,7 +195,7 @@ mt7996_coredump_fw_stack(struct mt7996_dev *dev, u8 type, struct mt7996_coredump
 	}
 }
 
-static struct mt7996_coredump *mt7996_coredump_build(struct mt7996_dev *dev, u8 type)
+struct mt7996_coredump *mt7996_coredump_build(struct mt7996_dev *dev, u8 type, bool full_dump)
 {
 	struct mt7996_crash_data *crash_data = dev->coredump.crash_data[type];
 	struct mt7996_coredump *dump;
@@ -206,7 +206,7 @@ static struct mt7996_coredump *mt7996_coredump_build(struct mt7996_dev *dev, u8 
 
 	len = hdr_len;
 
-	if (coredump_memdump && crash_data->memdump_buf_len)
+	if (full_dump && coredump_memdump && crash_data->memdump_buf_len)
 		len += sizeof(*dump_mem) + crash_data->memdump_buf_len;
 
 	sofar += hdr_len;
@@ -248,6 +248,9 @@ static struct mt7996_coredump *mt7996_coredump_build(struct mt7996_dev *dev, u8 
 	mt7996_coredump_fw_state(dev, type, dump, &exception);
 	mt7996_coredump_fw_stack(dev, type, dump, exception);
 
+	if (!full_dump)
+		goto skip_dump_mem;
+
 	/* gather memory content */
 	dump_mem = (struct mt7996_coredump_mem *)(buf + sofar);
 	dump_mem->len = crash_data->memdump_buf_len;
@@ -255,6 +258,7 @@ static struct mt7996_coredump *mt7996_coredump_build(struct mt7996_dev *dev, u8 
 		memcpy(dump_mem->data, crash_data->memdump_buf,
 		       crash_data->memdump_buf_len);
 
+skip_dump_mem:
 	mutex_unlock(&dev->dump_mutex);
 
 	return dump;
@@ -264,7 +268,7 @@ int mt7996_coredump_submit(struct mt7996_dev *dev, u8 type)
 {
 	struct mt7996_coredump *dump;
 
-	dump = mt7996_coredump_build(dev, type);
+	dump = mt7996_coredump_build(dev, type, true);
 	if (!dump) {
 		dev_warn(dev->mt76.dev, "no crash dump data found\n");
 		return -ENODATA;

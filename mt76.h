@@ -393,6 +393,8 @@ struct mt76_txwi_cache {
 		struct sk_buff *skb;
 		void *ptr;
 	};
+
+	unsigned long jiffies;
 };
 
 struct mt76_rx_tid {

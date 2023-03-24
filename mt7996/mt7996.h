@@ -370,6 +370,17 @@ struct mt7996_dev {
 	spinlock_t reg_lock;
 
 	u8 wtbl_size_group;
+
+#ifdef CONFIG_MTK_DEBUG
+	u16 wlan_idx;
+	struct {
+		u8 sku_disable;
+		u32 fw_dbg_module;
+		u8 fw_dbg_lv;
+		u32 bcn_total_cnt[__MT_MAX_BAND];
+	} dbg;
+	const struct mt7996_dbg_reg_desc *dbg_reg;
+#endif
 };
 
 enum {

@@ -75,6 +75,7 @@ struct mt7996_mem_region {
 const struct mt7996_mem_region *
 mt7996_coredump_get_mem_layout(struct mt7996_dev *dev, u8 type, u32 *num);
 struct mt7996_crash_data *mt7996_coredump_new(struct mt7996_dev *dev, u8 type);
+struct mt7996_coredump *mt7996_coredump_build(struct mt7996_dev *dev, u8 type, bool full_dump);
 int mt7996_coredump_submit(struct mt7996_dev *dev, u8 type);
 int mt7996_coredump_register(struct mt7996_dev *dev);
 void mt7996_coredump_unregister(struct mt7996_dev *dev);
@@ -90,6 +91,12 @@ mt7996_coredump_get_mem_layout(struct mt7996_dev *dev, u8 type, u32 *num)
 static inline int mt7996_coredump_submit(struct mt7996_dev *dev, u8 type)
 {
 	return 0;
+}
+
+static inline struct
+mt7996_coredump *mt7996_coredump_build(struct mt7996_dev *dev, u8 type, bool full_dump)
+{
+	return NULL;
 }
 
 static inline struct
