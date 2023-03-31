@@ -11,6 +11,14 @@ static const char * const testmode_state[] = {
 	[MT76_TM_STATE_TX_FRAMES] = "tx_frames",
 	[MT76_TM_STATE_RX_FRAMES] = "rx_frames",
 	[MT76_TM_STATE_TX_CONT] = "tx_cont",
+	[MT76_TM_STATE_GROUP_PREK] = "group_prek",
+	[MT76_TM_STATE_GROUP_PREK_DUMP] = "group_prek_dump",
+	[MT76_TM_STATE_GROUP_PREK_CLEAN] = "group_prek_clean",
+	[MT76_TM_STATE_DPD_2G] = "dpd_2g",
+	[MT76_TM_STATE_DPD_5G] = "dpd_5g",
+	[MT76_TM_STATE_DPD_6G] = "dpd_6g",
+	[MT76_TM_STATE_DPD_DUMP] = "dpd_dump",
+	[MT76_TM_STATE_DPD_CLEAN] = "dpd_clean",
 };
 
 static const char * const testmode_tx_mode[] = {

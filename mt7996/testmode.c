@@ -7,6 +7,8 @@
 #include "mac.h"
 #include "mcu.h"
 #include "testmode.h"
+#include "eeprom.h"
+#include "mtk_mcu.h"
 
 enum {
 	TM_CHANGED_TXPOWER,
@@ -397,6 +399,436 @@ mt7996_tm_set_tx_cont(struct mt7996_phy *phy, bool en)
 	}
 }
 
+static int
+mt7996_tm_group_prek(struct mt7996_phy *phy, enum mt76_testmode_state state)
+{
+	u8 *eeprom;
+	u32 i, group_size, dpd_size, size, offs, *pre_cal;
+	int ret = 0;
+	struct mt7996_dev *dev = phy->dev;
+	struct mt76_dev *mdev = &dev->mt76;
+	struct mt7996_tm_req req = {
+		.rf_test = {
+			.tag = cpu_to_le16(UNI_RF_TEST_CTRL),
+			.len = cpu_to_le16(sizeof(req.rf_test)),
+			.action = RF_ACTION_IN_RF_TEST,
+			.icap_len = RF_TEST_ICAP_LEN,
+			.op.rf.func_idx = cpu_to_le32(RF_TEST_RE_CAL),
+			.op.rf.param.cal_param.func_data = cpu_to_le32(RF_PRE_CAL),
+			.op.rf.param.cal_param.band_idx = phy->mt76->band_idx,
+		},
+	};
+
+	if (!dev->flash_mode) {
+		dev_err(dev->mt76.dev, "Currently not in FLASH or BIN FILE mode, return!\n");
+		return -EOPNOTSUPP;
+	}
+
+	eeprom = mdev->eeprom.data;
+	dev->cur_prek_offset = 0;
+	group_size = MT_EE_CAL_GROUP_SIZE;
+	dpd_size = MT_EE_CAL_DPD_SIZE;
+	size = group_size + dpd_size;
+	offs = MT_EE_DO_PRE_CAL;
+
+	switch (state) {
+	case MT76_TM_STATE_GROUP_PREK:
+		if (!dev->cal) {
+			dev->cal = devm_kzalloc(mdev->dev, size, GFP_KERNEL);
+			if (!dev->cal)
+				return -ENOMEM;
+		}
+
+		ret = mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(TESTMODE_CTRL), &req,
+					sizeof(req), false);
+		wait_event_timeout(mdev->mcu.wait, dev->cur_prek_offset == group_size,
+				   30 * HZ);
+
+		if (ret) {
+			dev_err(dev->mt76.dev, "Group Pre-cal: mcu send msg failed!\n");
+			return ret;
+		}
+
+		if (!ret)
+			eeprom[offs] |= MT_EE_WIFI_CAL_GROUP;
+		break;
+	case MT76_TM_STATE_GROUP_PREK_DUMP:
+		pre_cal = (u32 *)dev->cal;
+		if (!pre_cal) {
+			dev_info(dev->mt76.dev, "Not group pre-cal yet!\n");
+			return ret;
+		}
+		dev_info(dev->mt76.dev, "Group Pre-Cal:\n");
+		for (i = 0; i < (group_size / sizeof(u32)); i += 4) {
+			dev_info(dev->mt76.dev, "[0x%08lx] 0x%8x 0x%8x 0x%8x 0x%8x\n",
+				 i * sizeof(u32), pre_cal[i], pre_cal[i + 1],
+				 pre_cal[i + 2], pre_cal[i + 3]);
+		}
+		break;
+	case MT76_TM_STATE_GROUP_PREK_CLEAN:
+		pre_cal = (u32 *)dev->cal;
+		if (!pre_cal)
+			return ret;
+		memset(pre_cal, 0, group_size);
+		eeprom[offs] &= ~MT_EE_WIFI_CAL_GROUP;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
+static int
+mt7996_tm_dpd_prek_send_req(struct mt7996_phy *phy, struct mt7996_tm_req *req,
+			    const struct ieee80211_channel *chan_list, u32 channel_size,
+			    enum nl80211_chan_width width, u32 func_data)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct mt76_phy *mphy = phy->mt76;
+	struct cfg80211_chan_def chandef_backup, *chandef = &mphy->chandef;
+	struct ieee80211_channel chan_backup;
+	int i, ret;
+
+	if (!chan_list)
+		return -EOPNOTSUPP;
+
+	req->rf_test.op.rf.param.cal_param.func_data = cpu_to_le32(func_data);
+
+	memcpy(&chan_backup, chandef->chan, sizeof(struct ieee80211_channel));
+	memcpy(&chandef_backup, chandef, sizeof(struct cfg80211_chan_def));
+
+	for (i = 0; i < channel_size; i++) {
+		memcpy(chandef->chan, &chan_list[i], sizeof(struct ieee80211_channel));
+		chandef->width = width;
+
+		/* set channel switch reason */
+		mphy->hw->conf.flags |= IEEE80211_CONF_OFFCHANNEL;
+		mt7996_mcu_set_chan_info(phy, UNI_CHANNEL_SWITCH);
+
+		ret = mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(TESTMODE_CTRL), req,
+					sizeof(*req), false);
+		if (ret) {
+			dev_err(dev->mt76.dev, "DPD Pre-cal: mcu send msg failed!\n");
+			goto out;
+		}
+	}
+
+out:
+	mphy->hw->conf.flags &= ~IEEE80211_CONF_OFFCHANNEL;
+	memcpy(chandef, &chandef_backup, sizeof(struct cfg80211_chan_def));
+	memcpy(chandef->chan, &chan_backup, sizeof(struct ieee80211_channel));
+	mt7996_mcu_set_chan_info(phy, UNI_CHANNEL_SWITCH);
+
+	return ret;
+}
+
+static int
+mt7996_tm_dpd_prek(struct mt7996_phy *phy, enum mt76_testmode_state state)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct mt76_dev *mdev = &dev->mt76;
+	struct mt76_phy *mphy = phy->mt76;
+	struct mt7996_tm_req req = {
+		.rf_test = {
+			.tag = cpu_to_le16(UNI_RF_TEST_CTRL),
+			.len = cpu_to_le16(sizeof(req.rf_test)),
+			.action = RF_ACTION_IN_RF_TEST,
+			.icap_len = RF_TEST_ICAP_LEN,
+			.op.rf.func_idx = cpu_to_le32(RF_TEST_RE_CAL),
+			.op.rf.param.cal_param.band_idx = phy->mt76->band_idx,
+		},
+	};
+	u32 i, j, group_size, dpd_size, size, offs, *pre_cal;
+	u32 wait_on_prek_offset = 0;
+	u8 do_precal, *eeprom;
+	int ret = 0;
+
+	if (!dev->flash_mode) {
+		dev_err(dev->mt76.dev, "Currently not in FLASH or BIN FILE mode, return!\n");
+		return -EOPNOTSUPP;
+	}
+
+	eeprom = mdev->eeprom.data;
+	dev->cur_prek_offset = 0;
+	group_size = MT_EE_CAL_GROUP_SIZE;
+	dpd_size = MT_EE_CAL_DPD_SIZE;
+	size = group_size + dpd_size;
+	offs = MT_EE_DO_PRE_CAL;
+
+	if (!dev->cal && state < MT76_TM_STATE_DPD_DUMP) {
+		dev->cal = devm_kzalloc(mdev->dev, size, GFP_KERNEL);
+		if (!dev->cal)
+			return -ENOMEM;
+	}
+
+	switch (state) {
+	case MT76_TM_STATE_DPD_2G:
+		ret = mt7996_tm_dpd_prek_send_req(phy, &req, dpd_2g_ch_list_bw20,
+						  dpd_2g_bw20_ch_num,
+						  NL80211_CHAN_WIDTH_20, RF_DPD_FLAT_CAL);
+		wait_on_prek_offset += dpd_2g_bw20_ch_num * DPD_PER_CH_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait,
+				   dev->cur_prek_offset == wait_on_prek_offset, 30 * HZ);
+
+		do_precal = MT_EE_WIFI_CAL_DPD_2G;
+		break;
+	case MT76_TM_STATE_DPD_5G:
+		/* 5g channel bw20 calibration */
+		ret = mt7996_tm_dpd_prek_send_req(phy, &req, mphy->sband_5g.sband.channels,
+						  mphy->sband_5g.sband.n_channels,
+						  NL80211_CHAN_WIDTH_20, RF_DPD_FLAT_5G_CAL);
+		if (ret)
+			return ret;
+		wait_on_prek_offset += mphy->sband_5g.sband.n_channels * DPD_PER_CH_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait,
+				   dev->cur_prek_offset == wait_on_prek_offset, 30 * HZ);
+
+		/* 5g channel bw160 calibration */
+		ret = mt7996_tm_dpd_prek_send_req(phy, &req, dpd_5g_ch_list_bw160,
+						  dpd_5g_bw160_ch_num,
+						  NL80211_CHAN_WIDTH_160, RF_DPD_FLAT_5G_MEM_CAL);
+		wait_on_prek_offset += dpd_5g_bw160_ch_num * DPD_PER_CH_GT_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait,
+				   dev->cur_prek_offset == wait_on_prek_offset, 30 * HZ);
+
+		do_precal = MT_EE_WIFI_CAL_DPD_5G;
+		break;
+	case MT76_TM_STATE_DPD_6G:
+		/* 6g channel bw20 calibration */
+		ret = mt7996_tm_dpd_prek_send_req(phy, &req, mphy->sband_6g.sband.channels,
+						  mphy->sband_6g.sband.n_channels,
+						  NL80211_CHAN_WIDTH_20, RF_DPD_FLAT_6G_CAL);
+		if (ret)
+			return ret;
+		wait_on_prek_offset += mphy->sband_6g.sband.n_channels * DPD_PER_CH_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait,
+				   dev->cur_prek_offset == wait_on_prek_offset, 30 * HZ);
+
+		/* 6g channel bw160 calibration */
+		ret = mt7996_tm_dpd_prek_send_req(phy, &req, dpd_6g_ch_list_bw160,
+						  dpd_6g_bw160_ch_num,
+						  NL80211_CHAN_WIDTH_160, RF_DPD_FLAT_6G_MEM_CAL);
+		if (ret)
+			return ret;
+		wait_on_prek_offset += dpd_6g_bw160_ch_num * DPD_PER_CH_GT_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait,
+				   dev->cur_prek_offset == wait_on_prek_offset, 30 * HZ);
+
+		/* 6g channel bw320 calibration */
+		ret = mt7996_tm_dpd_prek_send_req(phy, &req, dpd_6g_ch_list_bw320,
+						  dpd_6g_bw320_ch_num,
+						  NL80211_CHAN_WIDTH_320, RF_DPD_FLAT_6G_MEM_CAL);
+		wait_on_prek_offset += dpd_6g_bw320_ch_num * DPD_PER_CH_GT_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait,
+				   dev->cur_prek_offset == wait_on_prek_offset, 30 * HZ);
+
+		do_precal = MT_EE_WIFI_CAL_DPD_6G;
+		break;
+	case MT76_TM_STATE_DPD_DUMP:
+		if (!dev->cal) {
+			dev_info(dev->mt76.dev, "Not DPD pre-cal yet!\n");
+			return ret;
+		}
+		pre_cal = (u32 *)dev->cal;
+		dev_info(dev->mt76.dev, "DPD Pre-Cal:\n");
+		for (i = 0; i < dpd_size / sizeof(u32); i += 4) {
+			j = i + (group_size / sizeof(u32));
+			dev_info(dev->mt76.dev, "[0x%08lx] 0x%8x 0x%8x 0x%8x 0x%8x\n",
+				 j * sizeof(u32), pre_cal[j], pre_cal[j + 1],
+				 pre_cal[j + 2], pre_cal[j + 3]);
+		}
+		return 0;
+	case MT76_TM_STATE_DPD_CLEAN:
+		pre_cal = (u32 *)dev->cal;
+		if (!pre_cal)
+			return ret;
+		memset(pre_cal + (group_size / sizeof(u32)), 0, dpd_size);
+		do_precal = MT_EE_WIFI_CAL_DPD;
+		eeprom[offs] &= ~do_precal;
+		return 0;
+	default:
+		return -EINVAL;
+	}
+
+	if (!ret)
+		eeprom[offs] |= do_precal;
+
+	return ret;
+}
+
+static int
+mt7996_tm_dump_precal(struct mt76_phy *mphy, struct sk_buff *msg, int flag, int type)
+{
+#define DPD_PER_CHAN_SIZE_MASK		GENMASK(31, 30)
+#define DPD_2G_RATIO_MASK		GENMASK(29, 20)
+#define DPD_5G_RATIO_MASK		GENMASK(19, 10)
+#define DPD_6G_RATIO_MASK		GENMASK(9, 0)
+	struct mt7996_phy *phy = mphy->priv;
+	struct mt7996_dev *dev = phy->dev;
+	u32 i, group_size, dpd_size, total_size, size, dpd_info = 0;
+	u32 dpd_size_2g, dpd_size_5g, dpd_size_6g;
+	u32 base, offs, transmit_size = 1000;
+	u8 *pre_cal, *eeprom;
+	void *precal;
+	enum prek_ops {
+		PREK_GET_INFO,
+		PREK_SYNC_ALL,
+		PREK_SYNC_GROUP,
+		PREK_SYNC_DPD_2G,
+		PREK_SYNC_DPD_5G,
+		PREK_SYNC_DPD_6G,
+		PREK_CLEAN_GROUP,
+		PREK_CLEAN_DPD,
+	};
+
+	if (!dev->cal) {
+		dev_info(dev->mt76.dev, "Not pre-cal yet!\n");
+		return 0;
+	}
+
+	group_size = MT_EE_CAL_GROUP_SIZE;
+	dpd_size = MT_EE_CAL_DPD_SIZE;
+	total_size = group_size + dpd_size;
+	pre_cal = dev->cal;
+	eeprom = dev->mt76.eeprom.data;
+	offs = MT_EE_DO_PRE_CAL;
+
+	dpd_size_2g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_2GHZ);
+	dpd_size_5g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_5GHZ);
+	dpd_size_6g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_6GHZ);
+
+	switch (type) {
+	case PREK_SYNC_ALL:
+		base = 0;
+		size = total_size;
+		break;
+	case PREK_SYNC_GROUP:
+		base = 0;
+		size = group_size;
+		break;
+	case PREK_SYNC_DPD_2G:
+		base = group_size;
+		size = dpd_size_2g;
+		break;
+	case PREK_SYNC_DPD_5G:
+		base = group_size + dpd_size_2g;
+		size = dpd_size_5g;
+		break;
+	case PREK_SYNC_DPD_6G:
+		base = group_size + dpd_size_2g + dpd_size_5g;
+		size = dpd_size_6g;
+		break;
+	case PREK_GET_INFO:
+		break;
+	default:
+		return 0;
+	}
+
+	if (!flag) {
+		if (eeprom[offs] & MT_EE_WIFI_CAL_DPD) {
+			dpd_info |= u32_encode_bits(1, DPD_PER_CHAN_SIZE_MASK) |
+				    u32_encode_bits(dpd_size_2g / MT_EE_CAL_UNIT,
+						    DPD_2G_RATIO_MASK) |
+				    u32_encode_bits(dpd_size_5g / MT_EE_CAL_UNIT,
+						    DPD_5G_RATIO_MASK) |
+				    u32_encode_bits(dpd_size_6g / MT_EE_CAL_UNIT,
+						    DPD_6G_RATIO_MASK);
+		}
+		dev->cur_prek_offset = 0;
+		precal = nla_nest_start(msg, MT76_TM_ATTR_PRECAL_INFO);
+		if (!precal)
+			return -ENOMEM;
+		nla_put_u32(msg, 0, group_size);
+		nla_put_u32(msg, 1, dpd_size);
+		nla_put_u32(msg, 2, dpd_info);
+		nla_put_u32(msg, 3, transmit_size);
+		nla_put_u32(msg, 4, eeprom[offs]);
+		nla_nest_end(msg, precal);
+	} else {
+		precal = nla_nest_start(msg, MT76_TM_ATTR_PRECAL);
+		if (!precal)
+			return -ENOMEM;
+
+		transmit_size = (dev->cur_prek_offset + transmit_size < size) ?
+				transmit_size : (size - dev->cur_prek_offset);
+		for (i = 0; i < transmit_size; i++) {
+			if (nla_put_u8(msg, i, pre_cal[base + dev->cur_prek_offset + i]))
+				return -ENOMEM;
+		}
+		dev->cur_prek_offset += transmit_size;
+
+		nla_nest_end(msg, precal);
+	}
+
+	return 0;
+}
+
+static void
+mt7996_tm_re_cal_event(struct mt7996_dev *dev, struct mt7996_tm_rf_test_result *result,
+		       struct mt7996_tm_rf_test_data *data)
+{
+	u32 base, dpd_size_2g, dpd_size_5g, dpd_size_6g, cal_idx, cal_type, len = 0;
+	u8 *pre_cal;
+
+	pre_cal = dev->cal;
+	dpd_size_2g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_2GHZ);
+	dpd_size_5g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_5GHZ);
+	dpd_size_6g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_6GHZ);
+
+	cal_idx = le32_to_cpu(data->cal_idx);
+	cal_type = le32_to_cpu(data->cal_type);
+	len = le32_to_cpu(result->payload_length);
+	len = len - sizeof(struct mt7996_tm_rf_test_data);
+
+	switch (cal_type) {
+	case RF_PRE_CAL:
+		base = 0;
+		break;
+	case RF_DPD_FLAT_CAL:
+		base = MT_EE_CAL_GROUP_SIZE;
+		break;
+	case RF_DPD_FLAT_5G_CAL:
+	case RF_DPD_FLAT_5G_MEM_CAL:
+		base = MT_EE_CAL_GROUP_SIZE + dpd_size_2g;
+		break;
+	case RF_DPD_FLAT_6G_CAL:
+	case RF_DPD_FLAT_6G_MEM_CAL:
+		base = MT_EE_CAL_GROUP_SIZE + dpd_size_2g + dpd_size_5g;
+		break;
+	default:
+		dev_info(dev->mt76.dev, "Unknown calibration type!\n");
+		return;
+	}
+	pre_cal += (base + dev->cur_prek_offset);
+
+	memcpy(pre_cal, data->cal_data, len);
+	dev->cur_prek_offset += len;
+}
+
+void mt7996_tm_rf_test_event(struct mt7996_dev *dev, struct sk_buff *skb)
+{
+	struct mt7996_tm_event *event;
+	struct mt7996_tm_rf_test_result *result;
+	struct mt7996_tm_rf_test_data *data;
+	static u32 event_type;
+
+	skb_pull(skb, sizeof(struct mt7996_mcu_rxd));
+	event = (struct mt7996_tm_event *)skb->data;
+	result = (struct mt7996_tm_rf_test_result *)&event->result;
+	data = (struct mt7996_tm_rf_test_data *)result->data;
+
+	event_type = le32_to_cpu(result->func_idx);
+
+	switch (event_type) {
+	case RF_TEST_RE_CAL:
+		mt7996_tm_re_cal_event(dev, result, data);
+		break;
+	default:
+		break;
+	}
+}
+
 static void
 mt7996_tm_update_params(struct mt7996_phy *phy, u32 changed)
 {
@@ -454,6 +886,10 @@ mt7996_tm_set_state(struct mt76_phy *mphy, enum mt76_testmode_state state)
 	else if (prev_state == MT76_TM_STATE_OFF ||
 		 state == MT76_TM_STATE_OFF)
 		mt7996_tm_init(phy, !(state == MT76_TM_STATE_OFF));
+	else if (state >= MT76_TM_STATE_GROUP_PREK && state <= MT76_TM_STATE_GROUP_PREK_CLEAN)
+		return mt7996_tm_group_prek(phy, state);
+	else if (state >= MT76_TM_STATE_DPD_2G && state <= MT76_TM_STATE_DPD_CLEAN)
+		return mt7996_tm_dpd_prek(phy, state);
 
 	if ((state == MT76_TM_STATE_IDLE &&
 	     prev_state == MT76_TM_STATE_OFF) ||
@@ -737,4 +1173,5 @@ const struct mt76_testmode_ops mt7996_testmode_ops = {
 	.reset_rx_stats = mt7996_tm_reset_trx_stats,
 	.tx_stop = mt7996_tm_tx_stop,
 	.set_eeprom = mt7996_tm_set_eeprom,
+	.dump_precal = mt7996_tm_dump_precal,
 };

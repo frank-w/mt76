@@ -12,6 +12,42 @@ static bool testmode_enable;
 module_param(testmode_enable, bool, 0644);
 MODULE_PARM_DESC(testmode_enable, "Enable testmode");
 
+const struct ieee80211_channel dpd_2g_ch_list_bw20[] = {
+	CHAN2G(3, 2422),
+	CHAN2G(7, 2442),
+	CHAN2G(11, 2462)
+};
+
+const struct ieee80211_channel dpd_5g_ch_list_bw160[] = {
+	CHAN5G(50, 5250),
+	CHAN5G(114, 5570),
+	CHAN5G(163, 5815)
+};
+
+const struct ieee80211_channel dpd_6g_ch_list_bw160[] = {
+	CHAN6G(15, 6025),
+	CHAN6G(47, 6185),
+	CHAN6G(79, 6345),
+	CHAN6G(111, 6505),
+	CHAN6G(143, 6665),
+	CHAN6G(175, 6825),
+	CHAN6G(207, 6985)
+};
+
+const struct ieee80211_channel dpd_6g_ch_list_bw320[] = {
+	CHAN6G(31, 6105),
+	CHAN6G(63, 6265),
+	CHAN6G(95, 6425),
+	CHAN6G(127, 6585),
+	CHAN6G(159, 6745),
+	CHAN6G(191, 6905)
+};
+
+const u32 dpd_2g_bw20_ch_num = ARRAY_SIZE(dpd_2g_ch_list_bw20);
+const u32 dpd_5g_bw160_ch_num = ARRAY_SIZE(dpd_5g_ch_list_bw160);
+const u32 dpd_6g_bw160_ch_num = ARRAY_SIZE(dpd_6g_ch_list_bw160);
+const u32 dpd_6g_bw320_ch_num = ARRAY_SIZE(dpd_6g_ch_list_bw320);
+
 static int mt7996_check_eeprom(struct mt7996_dev *dev)
 {
 #define FEM_INT				0
@@ -72,6 +108,36 @@ static char *mt7996_eeprom_name(struct mt7996_dev *dev)
 	default:
 		return MT7996_EEPROM_DEFAULT;
 	}
+}
+
+int
+mt7996_get_dpd_per_band_size(struct mt7996_dev *dev, enum nl80211_band band)
+{
+	/* handle different sku */
+	static const u8 band_to_idx[] = {
+		[NL80211_BAND_2GHZ] = MT_BAND0,
+		[NL80211_BAND_5GHZ] = MT_BAND1,
+		[NL80211_BAND_6GHZ] = MT_BAND2,
+	};
+	struct mt7996_phy *phy = __mt7996_phy(dev, band_to_idx[band]);
+	struct mt76_phy *mphy;
+	int dpd_size;
+
+	if (!phy)
+		return 0;
+
+	mphy = phy->mt76;
+
+	if (band == NL80211_BAND_2GHZ)
+		dpd_size = dpd_2g_bw20_ch_num * DPD_PER_CH_BW20_SIZE;
+	else if (band == NL80211_BAND_5GHZ)
+		dpd_size = mphy->sband_5g.sband.n_channels * DPD_PER_CH_BW20_SIZE +
+			   dpd_5g_bw160_ch_num * DPD_PER_CH_GT_BW20_SIZE;
+	else
+		dpd_size = mphy->sband_6g.sband.n_channels * DPD_PER_CH_BW20_SIZE +
+			   (dpd_6g_bw160_ch_num + dpd_6g_bw320_ch_num) * DPD_PER_CH_GT_BW20_SIZE;
+
+	return dpd_size;
 }
 
 static int

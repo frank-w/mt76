@@ -18,6 +18,27 @@
 #include "util.h"
 #include "testmode.h"
 
+#define CHAN2G(_idx, _freq) {			\
+	.band = NL80211_BAND_2GHZ,		\
+	.center_freq = (_freq),			\
+	.hw_value = (_idx),			\
+	.max_power = 30,			\
+}
+
+#define CHAN5G(_idx, _freq) {			\
+	.band = NL80211_BAND_5GHZ,		\
+	.center_freq = (_freq),			\
+	.hw_value = (_idx),			\
+	.max_power = 30,			\
+}
+
+#define CHAN6G(_idx, _freq) {			\
+	.band = NL80211_BAND_6GHZ,		\
+	.center_freq = (_freq),			\
+	.hw_value = (_idx),			\
+	.max_power = 30,			\
+}
+
 #define MT_MCU_RING_SIZE	32
 #define MT_RX_BUF_SIZE		2048
 #define MT_SKB_HEAD_LEN		256
@@ -697,6 +718,7 @@ struct mt76_testmode_ops {
 	void (*reset_rx_stats)(struct mt76_phy *phy);
 	void (*tx_stop)(struct mt76_phy *phy);
 	int (*set_eeprom)(struct mt76_phy *phy, u32 offset, u8 *val, u8 action);
+	int (*dump_precal)(struct mt76_phy *mphy, struct sk_buff *msg, int flag, int type);
 };
 
 #define MT_TM_FW_RX_COUNT	BIT(0)

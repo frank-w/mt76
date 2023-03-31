@@ -385,6 +385,9 @@ struct mt7996_dev {
 	struct dentry *debugfs_dir;
 	struct rchan *relay_fwlog;
 
+	void *cal;
+	u32 cur_prek_offset;
+
 	struct {
 		u16 table_mask;
 		u8 n_agrt;
@@ -505,6 +508,7 @@ int mt7996_eeprom_parse_hw_cap(struct mt7996_dev *dev, struct mt7996_phy *phy);
 int mt7996_eeprom_get_target_power(struct mt7996_dev *dev,
 				   struct ieee80211_channel *chan);
 s8 mt7996_eeprom_get_power_delta(struct mt7996_dev *dev, int band);
+int mt7996_get_dpd_per_band_size(struct mt7996_dev *dev, enum nl80211_band band);
 int mt7996_dma_init(struct mt7996_dev *dev);
 void mt7996_dma_reset(struct mt7996_dev *dev, bool force);
 void mt7996_dma_prefetch(struct mt7996_dev *dev);
@@ -589,6 +593,9 @@ void mt7996_mcu_exit(struct mt7996_dev *dev);
 int mt7996_mcu_get_all_sta_info(struct mt7996_phy *phy, u16 tag);
 int mt7996_mcu_wed_rro_reset_sessions(struct mt7996_dev *dev, u16 id);
 int mt7996_mcu_set_tx_power_ctrl(struct mt7996_phy *phy, u8 power_ctrl_id, u8 data);
+#ifdef CONFIG_NL80211_TESTMODE
+void mt7996_tm_rf_test_event(struct mt7996_dev *dev, struct sk_buff *skb);
+#endif
 
 static inline u8 mt7996_max_interface_num(struct mt7996_dev *dev)
 {

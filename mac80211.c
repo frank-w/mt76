@@ -7,27 +7,6 @@
 #include <net/page_pool.h>
 #include "mt76.h"
 
-#define CHAN2G(_idx, _freq) {			\
-	.band = NL80211_BAND_2GHZ,		\
-	.center_freq = (_freq),			\
-	.hw_value = (_idx),			\
-	.max_power = 30,			\
-}
-
-#define CHAN5G(_idx, _freq) {			\
-	.band = NL80211_BAND_5GHZ,		\
-	.center_freq = (_freq),			\
-	.hw_value = (_idx),			\
-	.max_power = 30,			\
-}
-
-#define CHAN6G(_idx, _freq) {			\
-	.band = NL80211_BAND_6GHZ,		\
-	.center_freq = (_freq),			\
-	.hw_value = (_idx),			\
-	.max_power = 30,			\
-}
-
 static const struct ieee80211_channel mt76_channels_2ghz[] = {
 	CHAN2G(1, 2412),
 	CHAN2G(2, 2417),

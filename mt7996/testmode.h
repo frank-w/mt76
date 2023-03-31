@@ -34,6 +34,12 @@ enum bw_mapping_method {
 	NUM_BW_MAP,
 };
 
+struct tm_cal_param {
+	__le32 func_data;
+	u8 band_idx;
+	u8 rsv[3];
+};
+
 struct mt7996_tm_rf_test {
 	__le16 tag;
 	__le16 len;
@@ -50,7 +56,7 @@ struct mt7996_tm_rf_test {
 			union {
 				__le32 func_data;
 				__le32 cal_dump;
-
+				struct tm_cal_param cal_param;
 				u8 _pad[80];
 			} param;
 		} rf;
@@ -63,10 +69,16 @@ struct mt7996_tm_req {
 	struct mt7996_tm_rf_test rf_test;
 } __packed;
 
+struct mt7996_tm_rf_test_data {
+	__le32 cal_idx;
+	__le32 cal_type;
+	u8 cal_data[0];
+} __packed;
+
 struct mt7996_tm_rf_test_result {
 	__le32 func_idx;
 	__le32 payload_length;
-	u8 event[0];
+	u8 data[0];
 };
 
 struct mt7996_tm_event {
@@ -77,12 +89,16 @@ struct mt7996_tm_event {
 	struct mt7996_tm_rf_test_result result;
 } __packed;
 
+#define RF_TEST_RE_CAL		0x01
+
 enum {
 	RF_ACTION_SWITCH_TO_RF_TEST,
 	RF_ACTION_IN_RF_TEST,
 	RF_ACTION_SET = 3,
 	RF_ACTION_GET,
 };
+
+#define RF_TEST_ICAP_LEN	120
 
 enum {
 	RF_OPER_NORMAL,
