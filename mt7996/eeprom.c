@@ -82,10 +82,17 @@ static int mt7996_check_eeprom(struct mt7996_dev *dev)
 	}
 }
 
-static char *mt7996_eeprom_name(struct mt7996_dev *dev)
+const char *mt7996_eeprom_name(struct mt7996_dev *dev)
 {
-	if (dev->testmode_enable)
-		return MT7996_EEPROM_DEFAULT_TM;
+	if (dev->bin_file_mode)
+		return dev->mt76.bin_file_name;
+
+	if (dev->testmode_enable) {
+		if (is_mt7992(&dev->mt76))
+			return MT7992_EEPROM_DEFAULT_TM;
+		else
+			return MT7996_EEPROM_DEFAULT_TM;
+	}
 
 	switch (mt76_chip(&dev->mt76)) {
 	case 0x7990:
@@ -152,7 +159,10 @@ mt7996_eeprom_load_default(struct mt7996_dev *dev)
 		return ret;
 
 	if (!fw || !fw->data) {
-		dev_err(dev->mt76.dev, "Invalid default bin\n");
+		if (dev->bin_file_mode)
+			dev_err(dev->mt76.dev, "Invalid bin (bin file mode)\n");
+		else
+			dev_err(dev->mt76.dev, "Invalid default bin\n");
 		ret = -EINVAL;
 		goto out;
 	}
@@ -166,18 +176,45 @@ out:
 	return ret;
 }
 
+static int mt7996_eeprom_load_flash(struct mt7996_dev *dev)
+{
+	int ret = 1;
+
+	/* return > 0 for load success, return 0 for load failed, return < 0 for non memory */
+	dev->bin_file_mode = mt76_check_bin_file_mode(&dev->mt76);
+	if (dev->bin_file_mode) {
+		dev->mt76.eeprom.size = MT7996_EEPROM_SIZE;
+		dev->mt76.eeprom.data = devm_kzalloc(dev->mt76.dev, dev->mt76.eeprom.size,
+						     GFP_KERNEL);
+		if (!dev->mt76.eeprom.data)
+			return -ENOMEM;
+
+		if (mt7996_eeprom_load_default(dev))
+			return 0;
+
+		if (mt7996_check_eeprom(dev))
+			return 0;
+	} else {
+		ret = mt76_eeprom_init(&dev->mt76, MT7996_EEPROM_SIZE);
+	}
+
+	return ret;
+}
+
 int mt7996_eeprom_check_fw_mode(struct mt7996_dev *dev)
 {
 	u8 *eeprom;
 	int ret;
 
 	/* load eeprom in flash or bin file mode to determine fw mode */
-	ret = mt76_eeprom_init(&dev->mt76, MT7996_EEPROM_SIZE);
+	ret = mt7996_eeprom_load_flash(dev);
+
 	if (ret < 0)
 		return ret;
 
 	if (ret) {
 		dev->flash_mode = true;
+		dev->eeprom_mode = dev->bin_file_mode ? BIN_FILE_MODE : FLASH_MODE;
 		eeprom = dev->mt76.eeprom.data;
 		/* testmode enable priority: eeprom field > module parameter */
 		dev->testmode_enable = !mt7996_check_eeprom(dev) ? eeprom[MT_EE_TESTMODE_EN] :
@@ -211,6 +248,7 @@ static int mt7996_eeprom_load(struct mt7996_dev *dev)
 			if (ret < 0)
 				return ret;
 		}
+		dev->eeprom_mode = EFUSE_MODE;
 	}
 
 	return mt7996_check_eeprom(dev);
@@ -337,6 +375,59 @@ int mt7996_eeprom_parse_hw_cap(struct mt7996_dev *dev, struct mt7996_phy *phy)
 	return mt7996_eeprom_parse_band_config(phy);
 }
 
+static int
+mt7996_eeprom_load_precal_binfile(struct mt7996_dev *dev, u32 offs, u32 size)
+{
+	const struct firmware *fw = NULL;
+	int ret;
+
+	ret = request_firmware(&fw, dev->mt76.bin_file_name, dev->mt76.dev);
+	if (ret)
+		return ret;
+
+	if (!fw || !fw->data) {
+		dev_err(dev->mt76.dev, "Invalid bin (bin file mode), load precal fail\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	memcpy(dev->cal, fw->data + offs, size);
+
+out:
+	release_firmware(fw);
+
+	return ret;
+}
+
+static int mt7996_eeprom_load_precal(struct mt7996_dev *dev)
+{
+	struct mt76_dev *mdev = &dev->mt76;
+	u8 *eeprom = mdev->eeprom.data;
+	u32 offs = MT_EE_DO_PRE_CAL;
+	u32 size, val = eeprom[offs];
+	int ret;
+
+	mt7996_eeprom_init_precal(dev);
+
+	if (!dev->flash_mode || !val)
+		return 0;
+
+	size = MT_EE_CAL_GROUP_SIZE + MT_EE_CAL_DPD_SIZE;
+
+	dev->cal = devm_kzalloc(mdev->dev, size, GFP_KERNEL);
+	if (!dev->cal)
+		return -ENOMEM;
+
+	if (dev->bin_file_mode)
+		return mt7996_eeprom_load_precal_binfile(dev, MT_EE_PRECAL, size);
+
+	ret = mt76_get_of_data_from_mtd(mdev, dev->cal, offs, size);
+	if (!ret)
+		return ret;
+
+	return mt76_get_of_data_from_nvmem(mdev, dev->cal, "precal", size);
+}
+
 int mt7996_eeprom_init(struct mt7996_dev *dev)
 {
 	int ret;
@@ -351,6 +442,8 @@ int mt7996_eeprom_init(struct mt7996_dev *dev)
 			return ret;
 
 		dev_warn(dev->mt76.dev, "eeprom load fail, use default bin\n");
+		dev->bin_file_mode = false;
+		dev->eeprom_mode = DEFAULT_BIN_MODE;
 		ret = mt7996_eeprom_load_default(dev);
 		if (ret)
 			return ret;

@@ -62,6 +62,7 @@
 #define MT7992_EEPROM_DEFAULT_24	"mediatek/mt7996/mt7992_eeprom_24_2i5i.bin"
 #define MT7992_EEPROM_DEFAULT_23	"mediatek/mt7996/mt7992_eeprom_23_2i5i.bin"
 #define MT7992_EEPROM_DEFAULT_23_EXT	"mediatek/mt7996/mt7992_eeprom_23_2e5e.bin"
+#define MT7992_EEPROM_DEFAULT_TM	"mediatek/mt7996/mt7992_eeprom_tm.bin"
 #define MT7996_EEPROM_SIZE		7680
 #define MT7996_EEPROM_BLOCK_SIZE	16
 #define MT7996_TOKEN_SIZE		16384
@@ -389,6 +390,8 @@ struct mt7996_dev {
 	} wed_rro;
 
 	bool testmode_enable;
+	bool bin_file_mode;
+	u8 eeprom_mode;
 
 	bool ibf;
 	u8 fw_debug_wm;
@@ -516,6 +519,7 @@ irqreturn_t mt7996_irq_handler(int irq, void *dev_instance);
 u64 __mt7996_get_tsf(struct ieee80211_hw *hw, struct mt7996_vif *mvif);
 int mt7996_register_device(struct mt7996_dev *dev);
 void mt7996_unregister_device(struct mt7996_dev *dev);
+const char *mt7996_eeprom_name(struct mt7996_dev *dev);
 int mt7996_eeprom_init(struct mt7996_dev *dev);
 int mt7996_eeprom_check_fw_mode(struct mt7996_dev *dev);
 int mt7996_eeprom_parse_hw_cap(struct mt7996_dev *dev, struct mt7996_phy *phy);

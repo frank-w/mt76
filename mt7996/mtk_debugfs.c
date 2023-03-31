@@ -2739,6 +2739,44 @@ static const struct file_operations mt7996_txpower_path_fops = {
 	.llseek = default_llseek,
 };
 
+static int mt7996_show_eeprom_mode(struct seq_file *s, void *data)
+{
+	struct mt7996_dev *dev = dev_get_drvdata(s->private);
+	struct mt76_dev *mdev = &dev->mt76;
+#ifdef CONFIG_NL80211_TESTMODE
+	const char *mtd_name = mdev->test_mtd.name;
+	u32 mtd_offset = mdev->test_mtd.offset;
+#else
+	const char *mtd_name = NULL;
+	u32 mtd_offset;
+#endif
+
+	seq_printf(s, "Current eeprom mode:\n");
+
+	switch (dev->eeprom_mode) {
+	case DEFAULT_BIN_MODE:
+		seq_printf(s, "   default bin mode\n   filename = %s\n", mt7996_eeprom_name(dev));
+		break;
+	case EFUSE_MODE:
+		seq_printf(s, "   efuse mode\n");
+		break;
+	case FLASH_MODE:
+		if (mtd_name)
+			seq_printf(s, "   flash mode\n   mtd name = %s\n   flash offset = 0x%x\n",
+				   mtd_name, mtd_offset);
+		else
+			seq_printf(s, "   flash mode\n");
+		break;
+	case BIN_FILE_MODE:
+		seq_printf(s, "   bin file mode\n   filename = %s\n", mt7996_eeprom_name(dev));
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+
 int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 {
 	struct mt7996_dev *dev = phy->dev;
@@ -2806,6 +2844,9 @@ int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 	debugfs_create_file("txpower_info", 0600, dir, phy, &mt7996_txpower_info_fops);
 	debugfs_create_file("txpower_sku", 0600, dir, phy, &mt7996_txpower_sku_fops);
 	debugfs_create_file("txpower_path", 0600, dir, phy, &mt7996_txpower_path_fops);
+
+	debugfs_create_devm_seqfile(dev->mt76.dev, "eeprom_mode", dir,
+				    mt7996_show_eeprom_mode);
 
 	debugfs_create_devm_seqfile(dev->mt76.dev, "wtbl_info", dir,
 				    mt7996_wtbl_read);

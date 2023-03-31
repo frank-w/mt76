@@ -16,7 +16,7 @@
  * @MT76_TM_ATTR_RESET: reset parameters to default (flag)
  * @MT76_TM_ATTR_STATE: test state (u32), see &enum mt76_testmode_state
  *
- * @MT76_TM_ATTR_MTD_PART: mtd partition used for eeprom data (string)
+ * @MT76_TM_ATTR_MTD_PART: mtd partition or binfile used for eeprom data (string)
  * @MT76_TM_ATTR_MTD_OFFSET: offset of eeprom data within the partition (u32)
  * @MT76_TM_ATTR_BAND_IDX: band idx of the chip (u8)
  *

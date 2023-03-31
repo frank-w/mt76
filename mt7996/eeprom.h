@@ -100,6 +100,13 @@ enum mt7996_eeprom_band {
 	MT_EE_BAND_SEL_6GHZ,
 };
 
+enum mt7915_eeprom_mode {
+	DEFAULT_BIN_MODE,
+	EFUSE_MODE,
+	FLASH_MODE,
+	BIN_FILE_MODE,
+};
+
 static inline int
 mt7996_get_channel_group_5g(int channel)
 {

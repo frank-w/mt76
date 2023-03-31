@@ -161,6 +161,31 @@ static int mt76_get_of_eeprom(struct mt76_dev *dev, void *eep, int len)
 	return mt76_get_of_data_from_nvmem(dev, eep, "eeprom", len);
 }
 
+bool mt76_check_bin_file_mode(struct mt76_dev *dev)
+{
+	struct device_node *np = dev->dev->of_node;
+	const char *bin_file_name = NULL;
+
+	if (!np)
+		return false;
+
+	of_property_read_string(np, "bin_file_name", &bin_file_name);
+
+	dev->bin_file_name = bin_file_name;
+	if (dev->bin_file_name) {
+		dev_info(dev->dev, "Using bin file %s\n", dev->bin_file_name);
+#ifdef CONFIG_NL80211_TESTMODE
+		dev->test_mtd.name = devm_kstrdup(dev->dev, bin_file_name, GFP_KERNEL);
+		dev->test_mtd.offset = -1;
+#endif
+	}
+
+	of_node_put(np);
+
+	return dev->bin_file_name ? true : false;
+}
+EXPORT_SYMBOL_GPL(mt76_check_bin_file_mode);
+
 void
 mt76_eeprom_override(struct mt76_phy *phy)
 {
