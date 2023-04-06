@@ -2899,7 +2899,7 @@ mt7996_starec_bf_read_set(void *data, u64 wlan_idx)
 {
 	struct mt7996_phy *phy = data;
 
-	return mt7996_mcu_set_txbf_internal(phy, BF_STA_REC_READ, wlan_idx);
+	return mt7996_mcu_set_txbf_internal(phy, BF_STA_REC_READ, wlan_idx, 0);
 }
 DEFINE_DEBUGFS_ATTRIBUTE(fops_starec_bf_read, NULL,
 			 mt7996_starec_bf_read_set, "%lld\n");
@@ -2943,7 +2943,7 @@ mt7996_bf_fbk_rpt_set(void *data, u64 wlan_idx)
 {
 	struct mt7996_phy *phy = data;
 
-	return mt7996_mcu_set_txbf_internal(phy, BF_FBRPT_DBG_INFO_READ, wlan_idx);
+	return mt7996_mcu_set_txbf_internal(phy, BF_FBRPT_DBG_INFO_READ, wlan_idx, 0);
 }
 DEFINE_DEBUGFS_ATTRIBUTE(fops_bf_fbk_rpt, NULL,
 			 mt7996_bf_fbk_rpt_set, "%lld\n");
@@ -2953,7 +2953,7 @@ mt7996_bf_pfmu_tag_read_set(void *data, u64 wlan_idx)
 {
 	struct mt7996_phy *phy = data;
 
-	return mt7996_mcu_set_txbf_internal(phy, BF_PFMU_TAG_READ, wlan_idx);
+	return mt7996_mcu_set_txbf_internal(phy, BF_PFMU_TAG_READ, wlan_idx, 1);
 }
 DEFINE_DEBUGFS_ATTRIBUTE(fops_bf_pfmu_tag_read, NULL,
 			 mt7996_bf_pfmu_tag_read_set, "%lld\n");

@@ -286,6 +286,59 @@ enum mt76_testmode_eeprom_action {
 	MT76_TM_EEPROM_ACTION_MAX = NUM_MT76_TM_EEPROM_ACTION - 1,
 };
 
+/**
+ * enum mt76_testmode_txbf_act - txbf action
+ *
+ * @MT76_TM_TXBF_ACT_GOLDEN_INIT: init ibf setting for golden device
+ * @MT76_TM_TXBF_ACT_INIT: init ibf setting for DUT
+ * @MT76_TM_TX_EBF_ACT_GOLDEN_INIT: init ebf setting for golden device
+ * @MT76_TM_TX_EBF_ACT_INIT: init ebf setting for DUT
+ * @MT76_TM_TXBF_ACT_UPDATE_CH: update channel info
+ * @MT76_TM_TXBF_ACT_PHASE_COMP: txbf phase compensation
+ * @MT76_TM_TXBF_ACT_TX_PREP: TX preparation for txbf
+ * @MT76_TM_TXBF_ACT_IBF_PROF_UPDATE: update ibf profile (pfmu tag, bf sta record)
+ * @MT76_TM_TXBF_ACT_EBF_PROF_UPDATE: update ebf profile
+ * @MT76_TM_TXBF_ACT_APPLY_TX: apply TX setting for txbf
+ * @MT76_TM_TXBF_ACT_PHASE_CAL: perform txbf phase calibration
+ * @MT76_TM_TXBF_ACT_PROF_UPDATE_ALL: update bf profile via instrument
+ * @MT76_TM_TXBF_ACT_PROF_UPDATE_ALL_CMD: update bf profile via instrument
+ * @MT76_TM_TXBF_ACT_E2P_UPDATE: write back txbf calibration result to eeprom
+ * @MT76_TM_TXBF_ACT_TRIGGER_SOUNDING: trigger beamformer to send sounding packet
+ * @MT76_TM_TXBF_ACT_STOP_SOUNDING: stop sending sounding packet
+ * @MT76_TM_TXBF_ACT_PROFILE_TAG_READ: read pfmu tag
+ * @MT76_TM_TXBF_ACT_PROFILE_TAG_WRITE: update pfmu tag
+ * @MT76_TM_TXBF_ACT_PROFILE_TAG_INVALID: invalidate pfmu tag
+ * @MT76_TM_TXBF_ACT_STA_REC_READ: read bf sta record
+ * @MT76_TM_TXBF_ACT_TXCMD: configure txcmd bf bit manually
+ */
+enum mt76_testmode_txbf_act {
+	MT76_TM_TXBF_ACT_GOLDEN_INIT,
+	MT76_TM_TXBF_ACT_INIT,
+	MT76_TM_TX_EBF_ACT_GOLDEN_INIT,
+	MT76_TM_TX_EBF_ACT_INIT,
+	MT76_TM_TXBF_ACT_UPDATE_CH,
+	MT76_TM_TXBF_ACT_PHASE_COMP,
+	MT76_TM_TXBF_ACT_TX_PREP,
+	MT76_TM_TXBF_ACT_IBF_PROF_UPDATE,
+	MT76_TM_TXBF_ACT_EBF_PROF_UPDATE,
+	MT76_TM_TXBF_ACT_APPLY_TX,
+	MT76_TM_TXBF_ACT_PHASE_CAL,
+	MT76_TM_TXBF_ACT_PROF_UPDATE_ALL,
+	MT76_TM_TXBF_ACT_PROF_UPDATE_ALL_CMD,
+	MT76_TM_TXBF_ACT_E2P_UPDATE,
+	MT76_TM_TXBF_ACT_TRIGGER_SOUNDING,
+	MT76_TM_TXBF_ACT_STOP_SOUNDING,
+	MT76_TM_TXBF_ACT_PROFILE_TAG_READ,
+	MT76_TM_TXBF_ACT_PROFILE_TAG_WRITE,
+	MT76_TM_TXBF_ACT_PROFILE_TAG_INVALID,
+	MT76_TM_TXBF_ACT_STA_REC_READ,
+	MT76_TM_TXBF_ACT_TXCMD,
+
+	/* keep last */
+	NUM_MT76_TM_TXBF_ACT,
+	MT76_TM_TXBF_ACT_MAX = NUM_MT76_TM_TXBF_ACT - 1,
+};
+
 extern const struct nla_policy mt76_tm_policy[NUM_MT76_TM_ATTRS];
 
 #endif

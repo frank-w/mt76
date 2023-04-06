@@ -44,6 +44,30 @@ static const char * const testmode_offchan_bw[] = {
 	[NL80211_CHAN_WIDTH_160] = "160",
 };
 
+static const char * const testmode_txbf_act[] = {
+	[MT76_TM_TXBF_ACT_GOLDEN_INIT] = "golden_init",
+	[MT76_TM_TXBF_ACT_INIT] = "init",
+	[MT76_TM_TX_EBF_ACT_GOLDEN_INIT] = "ebf_golden_init",
+	[MT76_TM_TX_EBF_ACT_INIT] = "ebf_init",
+	[MT76_TM_TXBF_ACT_UPDATE_CH] = "update_ch",
+	[MT76_TM_TXBF_ACT_PHASE_COMP] = "phase_comp",
+	[MT76_TM_TXBF_ACT_TX_PREP] = "tx_prep",
+	[MT76_TM_TXBF_ACT_IBF_PROF_UPDATE] = "ibf_prof_update",
+	[MT76_TM_TXBF_ACT_EBF_PROF_UPDATE] = "ebf_prof_update",
+	[MT76_TM_TXBF_ACT_APPLY_TX] = "apply_tx",
+	[MT76_TM_TXBF_ACT_PHASE_CAL] = "phase_cal",
+	[MT76_TM_TXBF_ACT_PROF_UPDATE_ALL] = "prof_update",
+	[MT76_TM_TXBF_ACT_PROF_UPDATE_ALL_CMD] = "prof_update_all",
+	[MT76_TM_TXBF_ACT_E2P_UPDATE] = "e2p_update",
+	[MT76_TM_TXBF_ACT_TRIGGER_SOUNDING] = "trigger_sounding",
+	[MT76_TM_TXBF_ACT_STOP_SOUNDING] = "stop_sounding",
+	[MT76_TM_TXBF_ACT_PROFILE_TAG_READ] = "pfmu_tag_read",
+	[MT76_TM_TXBF_ACT_PROFILE_TAG_WRITE] = "pfmu_tag_write",
+	[MT76_TM_TXBF_ACT_PROFILE_TAG_INVALID] = "set_invalid_prof",
+	[MT76_TM_TXBF_ACT_STA_REC_READ] = "sta_rec_read",
+	[MT76_TM_TXBF_ACT_TXCMD] = "txcmd",
+};
+
 static void print_enum(const struct tm_field *field, struct nlattr *attr)
 {
 	unsigned int i = nla_get_u8(attr);
@@ -92,6 +116,17 @@ static void print_u8(const struct tm_field *field, struct nlattr *attr)
 static void print_s8(const struct tm_field *field, struct nlattr *attr)
 {
 	printf("%d", (int8_t)nla_get_u8(attr));
+}
+
+static bool parse_u16_hex(const struct tm_field *field, int idx,
+			  struct nl_msg *msg, const char *val)
+{
+	return !nla_put_u16(msg, idx, strtoul(val, NULL, 16));
+}
+
+static void print_u16_hex(const struct tm_field *field, struct nlattr *attr)
+{
+	printf("%d", nla_get_u16(attr));
 }
 
 static bool parse_u32(const struct tm_field *field, int idx,
@@ -399,6 +434,8 @@ static const struct tm_field testdata_fields[NUM_MT76_TM_ATTRS] = {
 	FIELD(u8, AID, "aid"),
 	FIELD(u8, RU_ALLOC, "ru_alloc"),
 	FIELD(u8, RU_IDX, "ru_idx"),
+	FIELD_ENUM(TXBF_ACT, "txbf_act", testmode_txbf_act),
+	FIELD_ARRAY(u16_hex, TXBF_PARAM, "txbf_param"),
 	FIELD(u8, OFF_CH_SCAN_CH, "offchan_ch"),
 	FIELD(u8, OFF_CH_SCAN_CENTER_CH, "offchan_center_ch"),
 	FIELD_ENUM(OFF_CH_SCAN_BW, "offchan_bw", testmode_offchan_bw),

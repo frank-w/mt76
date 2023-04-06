@@ -326,6 +326,9 @@ enum offs_rev {
 #define MT_ARB_SCR_TX_DISABLE			BIT(8)
 #define MT_ARB_SCR_RX_DISABLE			BIT(9)
 
+#define MT_ARB_TQSAXM0(_band)			MT_WF_ARB(_band, 0x180)
+#define MT_ARB_TQSAXM_ALTX_START_MASK		GENMASK(12, 8)
+
 /* RMAC: band 0(0x820e5000), band 1(0x820f5000), band 2(0x830e5000), */
 #define MT_WF_RMAC_BASE(_band)			__BASE(WF_RMAC_BASE, (_band))
 #define MT_WF_RMAC(_band, ofs)			(MT_WF_RMAC_BASE(_band) + (ofs))

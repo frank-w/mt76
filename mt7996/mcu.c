@@ -1067,7 +1067,12 @@ mt7996_mcu_bss_basic_tlv(struct sk_buff *skb,
 	bss->hw_bss_idx = idx;
 
 	if (vif->type == NL80211_IFTYPE_MONITOR) {
-		memcpy(bss->bssid, phy->macaddr, ETH_ALEN);
+		struct mt76_testmode_data *td = &phy->test;
+
+		if (!td->bf_en)
+			memcpy(bss->bssid, phy->macaddr, ETH_ALEN);
+		else
+			memcpy(bss->bssid, td->addr[2], ETH_ALEN);
 		return 0;
 	}
 
@@ -4118,7 +4123,6 @@ int mt7996_mcu_set_ser(struct mt7996_dev *dev, u8 action, u8 val, u8 band)
 int mt7996_mcu_set_txbf(struct mt7996_dev *dev, u8 action)
 {
 #define MT7996_BF_MAX_SIZE	sizeof(union bf_tag_tlv)
-#define BF_PROCESSING	4
 	struct uni_header hdr;
 	struct sk_buff *skb;
 	struct tlv *tlv;

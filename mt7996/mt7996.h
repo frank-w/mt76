@@ -480,6 +480,14 @@ struct mt7996_dev {
 #ifdef CONFIG_MTK_VENDOR
 	bool cert_mode;
 #endif
+
+#if defined CONFIG_NL80211_TESTMODE || defined CONFIG_MTK_DEBUG
+	struct {
+		void *txbf_phase_cal;
+		void *txbf_pfmu_data;
+		void *txbf_pfmu_tag;
+	} test;
+#endif
 };
 
 enum {
@@ -819,7 +827,7 @@ int mt7996_mcu_muru_dbg_info(struct mt7996_dev *dev, u16 item, u8 val);
 int mt7996_mcu_set_sr_enable(struct mt7996_phy *phy, u8 action, u64 val, bool set);
 void mt7996_mcu_rx_sr_event(struct mt7996_dev *dev, struct sk_buff *skb);
 int mt7996_mcu_set_dup_wtbl(struct mt7996_dev *dev);
-int mt7996_mcu_set_txbf_internal(struct mt7996_phy *phy, u8 action, int idx);
+int mt7996_mcu_set_txbf_internal(struct mt7996_phy *phy, u8 action, int idx, bool bfer);
 void mt7996_mcu_rx_bf_event(struct mt7996_dev *dev, struct sk_buff *skb);
 int mt7996_mcu_set_muru_fixed_rate_enable(struct mt7996_dev *dev, u8 action, int val);
 int mt7996_mcu_set_muru_fixed_rate_parameter(struct mt7996_dev *dev, u8 action, void *para);
@@ -831,10 +839,12 @@ int mt7996_mcu_set_rfeature_trig_type(struct mt7996_phy *phy, u8 enable, u8 trig
 void mt7996_mcu_set_ppdu_tx_type(struct mt7996_phy *phy, u8 ppdu_type);
 void mt7996_mcu_set_nusers_ofdma(struct mt7996_phy *phy, u8 type, u8 ofdma_user_cnt);
 void mt7996_mcu_set_cert(struct mt7996_phy *phy, u8 type);
+void mt7996_tm_update_channel(struct mt7996_phy *phy);
 #endif
 
 #ifdef CONFIG_NET_MEDIATEK_SOC_WED
 int mt7996_dma_rro_init(struct mt7996_dev *dev);
 #endif /* CONFIG_NET_MEDIATEK_SOC_WED */
+
 
 #endif

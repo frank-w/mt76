@@ -462,6 +462,42 @@ out:
 	return err;
 }
 
+static int
+mt76_testmode_txbf_profile_update_all_cmd(struct mt76_phy *phy, struct nlattr **tb, u32 state)
+{
+#define PARAM_UNIT	5
+	static u8 pfmu_idx;
+	struct mt76_testmode_data *td = &phy->test;
+	struct mt76_dev *dev = phy->dev;
+	struct nlattr *cur;
+	u16 tmp_val[PARAM_UNIT], *val = td->txbf_param;
+	int idx, rem, ret, i = 0;
+
+	memset(td->txbf_param, 0, sizeof(td->txbf_param));
+	nla_for_each_nested(cur, tb[MT76_TM_ATTR_TXBF_PARAM], rem) {
+		if (nla_len(cur) != 2)
+			return -EINVAL;
+		idx = i % PARAM_UNIT;
+		tmp_val[idx] = nla_get_u16(cur);
+		if (idx == 1 && (tmp_val[idx] == 0xf0 || tmp_val[idx] == 0xff)) {
+			pfmu_idx = tmp_val[0];
+			return 0;
+		}
+		if (idx == PARAM_UNIT - 1) {
+			val[0] = pfmu_idx;
+			memcpy(val + 1, tmp_val, sizeof(tmp_val));
+			if (dev->test_ops->set_params) {
+				ret = dev->test_ops->set_params(phy, tb, state);
+				if (ret)
+					return ret;
+			}
+		}
+		i++;
+	}
+
+	return 0;
+}
+
 int mt76_testmode_cmd(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		      void *data, int len)
 {
@@ -604,6 +640,30 @@ int mt76_testmode_cmd(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			else
 				td->cfg.enable = nla_get_u8(cur);
 			idx++;
+		}
+	}
+
+	if (tb[MT76_TM_ATTR_TXBF_ACT]) {
+		struct nlattr *cur;
+		int rem, idx = 0;
+
+		if (!tb[MT76_TM_ATTR_TXBF_PARAM] ||
+		    mt76_tm_get_u8(tb[MT76_TM_ATTR_TXBF_ACT], &td->txbf_act,
+				   0, MT76_TM_TXBF_ACT_MAX))
+			goto out;
+
+		if (td->txbf_act == MT76_TM_TXBF_ACT_PROF_UPDATE_ALL_CMD) {
+			err = mt76_testmode_txbf_profile_update_all_cmd(phy, tb, state);
+			goto out;
+		}
+
+		memset(td->txbf_param, 0, sizeof(td->txbf_param));
+		nla_for_each_nested(cur, tb[MT76_TM_ATTR_TXBF_PARAM], rem) {
+			if (nla_len(cur) != 2 ||
+			    idx >= ARRAY_SIZE(td->txbf_param))
+				goto out;
+
+			td->txbf_param[idx++] = nla_get_u16(cur);
 		}
 	}
 

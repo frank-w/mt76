@@ -189,6 +189,164 @@ struct bf_txsnd_info {
 	u8 __rsv[2];
 } __packed;
 
+#define MAX_PHASE_GROUP_NUM	9
+
+struct bf_phase_comp {
+	__le16 tag;
+	__le16 len;
+
+	u8 bw;
+	u8 jp_band;
+	u8 band_idx;
+	bool read_from_e2p;
+	bool disable;
+	u8 group;
+	u8 rsv[2];
+	u8 buf[44];
+} __packed;
+
+struct bf_tx_apply {
+	__le16 tag;
+	__le16 len;
+
+	__le16 wlan_idx;
+	bool ebf;
+	bool ibf;
+	bool mu_txbf;
+	bool phase_cal;
+	u8 rsv[2];
+} __packed;
+
+struct bf_phase_cal {
+	__le16 tag;
+	__le16 len;
+
+	u8 group_l_m_n;
+	u8 group;
+	u8 sx2;
+	u8 cal_type;
+	u8 lna_gain_level;
+	u8 band_idx;
+	u8 rsv[2];
+} __packed;
+
+struct bf_txcmd {
+	__le16 tag;
+	__le16 len;
+
+	u8 action;
+	u8 bf_manual;
+	u8 bf_bit;
+	u8 rsv[5];
+} __packed;
+
+struct bf_pfmu_data_all {
+	__le16 tag;
+	__le16 len;
+
+	u8 pfmu_id;
+	u8 band_idx;
+	u8 rsv[2];
+
+	u8 buf[512];
+} __packed;
+
+#define TXBF_DUT_MAC_SUBADDR		0x22
+#define TXBF_GOLDEN_MAC_SUBADDR		0x11
+
+struct mt7996_tm_bf_req {
+	u8 _rsv[4];
+
+	union {
+		struct bf_sounding_on sounding;
+		struct bf_tx_apply tx_apply;
+		struct bf_pfmu_tag pfmu_tag;
+		struct bf_pfmu_data_all pfmu_data_all;
+		struct bf_phase_cal phase_cal;
+		struct bf_phase_comp phase_comp;
+		struct bf_txcmd txcmd;
+	};
+} __packed;
+
+enum tm_trx_mac_type {
+	TM_TRX_MAC_TX = 1,
+	TM_TRX_MAC_RX,
+	TM_TRX_MAC_TXRX,
+	TM_TRX_MAC_TXRX_RXV,
+	TM_TRX_MAC_RXV,
+	TM_TRX_MAC_RX_RXV,
+};
+
+enum tm_trx_param_idx {
+	TM_TRX_PARAM_RSV,
+	/* MAC */
+	TM_TRX_PARAM_SET_TRX,
+	TM_TRX_PARAM_RX_FILTER,
+	TM_TRX_PARAM_RX_FILTER_PKT_LEN,
+	TM_TRX_PARAM_SLOT_TIME,
+	TM_TRX_PARAM_CLEAN_PERSTA_TXQUEUE,
+	TM_TRX_PARAM_AMPDU_WTBL,
+	TM_TRX_PARAM_MU_RX_AID,
+	TM_TRX_PARAM_PHY_MANUAL_TX,
+
+	/* PHY */
+	TM_TRX_PARAM_RX_PATH,
+	TM_TRX_PARAM_TX_STREAM,
+	TM_TRX_PARAM_TSSI_STATUS,
+	TM_TRX_PARAM_DPD_STATUS,
+	TM_TRX_PARAM_RATE_POWER_OFFSET_ON_OFF,
+	TM_TRX_PARAM_THERMO_COMP_STATUS,
+	TM_TRX_PARAM_FREQ_OFFSET,
+	TM_TRX_PARAM_FAGC_RSSI_PATH,
+	TM_TRX_PARAM_PHY_STATUS_COUNT,
+	TM_TRX_PARAM_RXV_INDEX,
+
+	TM_TRX_PARAM_ANTENNA_PORT,
+	TM_TRX_PARAM_THERMAL_ONOFF,
+	TM_TRX_PARAM_TX_POWER_CONTROL_ALL_RF,
+	TM_TRX_PARAM_RATE_POWER_OFFSET,
+	TM_TRX_PARAM_SLT_CMD_TEST,
+	TM_TRX_PARAM_SKU,
+	TM_TRX_PARAM_POWER_PERCENTAGE_ON_OFF,
+	TM_TRX_PARAM_BF_BACKOFF_ON_OFF,
+	TM_TRX_PARAM_POWER_PERCENTAGE_LEVEL,
+	TM_TRX_PARAM_FRTBL_CFG,
+	TM_TRX_PARAM_PREAMBLE_PUNC_ON_OFF,
+
+	TM_TRX_PARAM_MAX_NUM,
+};
+
+enum trx_action {
+	TM_TRX_ACTION_SET,
+	TM_TRX_ACTION_GET,
+};
+
+struct tm_trx_set {
+	u8 type;
+	u8 enable;
+	u8 band_idx;
+	u8 rsv;
+} __packed;
+
+struct mt7996_tm_trx_req {
+	u8 param_num;
+	u8 _rsv[3];
+
+	__le16 tag;
+	__le16 len;
+
+	__le16 param_idx;
+	u8 band_idx;
+	u8 testmode_en;
+	u8 action;
+	u8 rsv[3];
+
+	u32 data;
+	struct tm_trx_set set_trx;
+
+	u8 buf[220];
+} __packed;
+
 struct mt7996_mcu_bf_basic_event {
 	struct mt7996_mcu_rxd rxd;
 
@@ -394,6 +552,181 @@ struct mt7996_pfmu_tag_event {
 	struct mt7996_pfmu_tag2 t2;
 };
 
+struct mt7996_pfmu_tag {
+	struct mt7996_pfmu_tag1 t1;
+	struct mt7996_pfmu_tag2 t2;
+};
+
+enum bf_lm_type {
+	BF_LM_LEGACY,
+	BF_LM_HT,
+	BF_LM_VHT,
+	BF_LM_HE,
+	BF_LM_EHT,
+};
+
+struct mt7996_txbf_phase_out {
+	u8 c0_l;
+	u8 c1_l;
+	u8 c2_l;
+	u8 c3_l;
+	u8 c0_m;
+	u8 c1_m;
+	u8 c2_m;
+	u8 c3_m;
+	u8 c0_mh;
+	u8 c1_mh;
+	u8 c2_mh;
+	u8 c3_mh;
+	u8 c0_h;
+	u8 c1_h;
+	u8 c2_h;
+	u8 c3_h;
+	u8 c0_uh;
+	u8 c1_uh;
+	u8 c2_uh;
+	u8 c3_uh;
+};
+
+struct mt7996_txbf_rx_phase_2g {
+	u8 rx_uh;
+	u8 rx_h;
+	u8 rx_m;
+	u8 rx_l;
+	u8 rx_ul;
+};
+
+struct mt7996_txbf_rx_phase_5g {
+	u8 rx_uh;
+	u8 rx_h;
+	u8 rx_mh;
+	u8 rx_m;
+	u8 rx_l;
+	u8 rx_ul;
+};
+
+struct mt7996_txbf_phase_info_2g {
+	struct mt7996_txbf_rx_phase_2g r0;
+	struct mt7996_txbf_rx_phase_2g r1;
+	struct mt7996_txbf_rx_phase_2g r2;
+	struct mt7996_txbf_rx_phase_2g r3;
+	struct mt7996_txbf_rx_phase_2g r2_sx2;
+	struct mt7996_txbf_rx_phase_2g r3_sx2;
+	u8 m_t0_h;
+	u8 m_t1_h;
+	u8 m_t2_h;
+	u8 m_t2_h_sx2;
+	u8 r0_reserved;
+	u8 r1_reserved;
+	u8 r2_reserved;
+	u8 r3_reserved;
+	u8 r2_sx2_reserved;
+	u8 r3_sx2_reserved;
+};
+
+struct mt7996_txbf_phase_info_5g {
+	struct mt7996_txbf_rx_phase_5g r0;
+	struct mt7996_txbf_rx_phase_5g r1;
+	struct mt7996_txbf_rx_phase_5g r2;
+	struct mt7996_txbf_rx_phase_5g r3;
+	struct mt7996_txbf_rx_phase_2g r2_sx2;	/* no middle-high in r2_sx2 */
+	struct mt7996_txbf_rx_phase_2g r3_sx2;	/* no middle-high in r3_sx2 */
+	u8 m_t0_h;
+	u8 m_t1_h;
+	u8 m_t2_h;
+	u8 m_t2_h_sx2;
+	u8 r0_reserved;
+	u8 r1_reserved;
+	u8 r2_reserved;
+	u8 r3_reserved;
+	u8 r2_sx2_reserved;
+	u8 r3_sx2_reserved;
+};
+
+struct mt7996_txbf_phase {
+	u8 status;
+	union {
+		struct mt7996_txbf_phase_info_2g phase_2g;
+		struct mt7996_txbf_phase_info_5g phase_5g;
+	};
+};
+
+#define phase_assign(group, field, dump, ...)	({						\
+	if (group) {										\
+		phase->phase_5g.field = cal->phase_5g.field;					\
+		if (dump)									\
+			dev_info(dev->mt76.dev, "%s = %d\n", #field, phase->phase_5g.field);	\
+	} else {										\
+		phase->phase_2g.field = cal->phase_5g.field;					\
+		if (dump)									\
+			dev_info(dev->mt76.dev, "%s = %d\n", #field, phase->phase_2g.field);	\
+	}											\
+})
+
+#define phase_assign_rx_g0(group, rx, ...)	({						\
+	phase_assign(group, rx.rx_uh, false);							\
+	phase_assign(group, rx.rx_h, false);							\
+	phase_assign(group, rx.rx_m, false);							\
+	phase_assign(group, rx.rx_l, false);							\
+	phase_assign(group, rx.rx_ul, false);							\
+})
+
+#define phase_assign_rx(group, rx, ...)	({							\
+	if (group) {										\
+		phase_assign(group, rx.rx_uh, true);						\
+		phase_assign(group, rx.rx_h, true);						\
+		phase->phase_5g.rx.rx_mh = cal->phase_5g.rx.rx_mh;				\
+		dev_info(dev->mt76.dev, "%s.rx_mh = %d\n", #rx, phase->phase_5g.rx.rx_mh);	\
+		phase_assign(group, rx.rx_m, true);						\
+		phase_assign(group, rx.rx_l, true);						\
+		phase_assign(group, rx.rx_ul, true);						\
+	} else {										\
+		phase_assign(group, rx.rx_uh, true);						\
+		phase_assign(group, rx.rx_h, true);						\
+		phase_assign(group, rx.rx_m, true);						\
+		phase_assign(group, rx.rx_l, true);						\
+		phase_assign(group, rx.rx_ul, true);						\
+	}											\
+})
+
+#define GROUP_L		0
+#define GROUP_M		1
+#define GROUP_H		2
+
+struct mt7996_pfmu_data {
+	__le16 subc_idx;
+	__le16 phi11;
+	__le16 phi21;
+	__le16 phi31;
+};
+
+struct mt7996_ibf_cal_info {
+	struct mt7996_mcu_bf_basic_event event;
+
+	u8 category_id;
+	u8 group_l_m_n;
+	u8 group;
+	bool sx2;
+	u8 status;
+	u8 cal_type;
+	u8 _rsv[2];
+	struct mt7996_txbf_phase_out phase_out;
+	union {
+		struct mt7996_txbf_phase_info_2g phase_2g;
+		struct mt7996_txbf_phase_info_5g phase_5g;
+	};
+} __packed;
+
+enum {
+	IBF_PHASE_CAL_UNSPEC,
+	IBF_PHASE_CAL_NORMAL,
+	IBF_PHASE_CAL_VERIFY,
+	IBF_PHASE_CAL_NORMAL_INSTRUMENT,
+	IBF_PHASE_CAL_VERIFY_INSTRUMENT,
+};
+
+#define MT7996_TXBF_SUBCAR_NUM	64
+
 enum {
 	UNI_EVENT_BF_PFMU_TAG = 0x5,
 	UNI_EVENT_BF_PFMU_DATA = 0x7,
@@ -406,11 +739,6 @@ enum {
 	UNI_EVENT_BF_TXCMD_CFG_INFO = 0x1B,
 	UNI_EVENT_BF_SND_CNT_INFO = 0x1D,
 	UNI_EVENT_BF_MAX_NUM
-};
-
-enum {
-	UNI_CMD_MURU_FIXED_RATE_CTRL = 0x11,
-	UNI_CMD_MURU_FIXED_GROUP_RATE_CTRL,
 };
 
 struct uni_muru_mum_set_group_tbl_entry {

@@ -488,7 +488,8 @@ struct sta_rec_bf {
 	bool codebook75_mu;
 
 	u8 he_ltf;
-	u8 rsv[3];
+	u8 pp_fd_val;
+	u8 rsv[2];
 } __packed;
 
 struct sta_rec_bfee {
@@ -1274,6 +1275,7 @@ enum {
 	MCU_UNI_CMD_VOW = 0x37,
 	MCU_UNI_CMD_PP = 0x38,
 	MCU_UNI_CMD_FIXED_RATE_TABLE = 0x40,
+	MCU_UNI_CMD_TESTMODE_TRX_PARAM = 0x42,
 	MCU_UNI_CMD_TESTMODE_CTRL = 0x46,
 	MCU_UNI_CMD_PRECAL_RESULT = 0x47,
 	MCU_UNI_CMD_RRO = 0x57,

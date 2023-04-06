@@ -685,6 +685,22 @@ struct bf_sounding_on {
 	__le32 snd_period;
 } __packed;
 
+enum sounding_mode {
+	SU_SOUNDING,
+	MU_SOUNDING,
+	SU_PERIODIC_SOUNDING,
+	MU_PERIODIC_SOUNDING,
+	BF_PROCESSING,
+	TXCMD_NONTB_SU_SOUNDING,
+	TXCMD_VHT_MU_SOUNDING,
+	TXCMD_TB_PER_BRP_SOUNDING,
+	TXCMD_TB_SOUNDING,
+
+	/* keep last */
+	NUM_SOUNDING_MODE,
+	SOUNDING_MODE_MAX = NUM_SOUNDING_MODE - 1,
+};
+
 struct bf_hw_en_status_update {
 	__le16 tag;
 	__le16 len;
@@ -708,6 +724,24 @@ union bf_tag_tlv {
 	struct bf_sounding_on bf_snd;
 	struct bf_hw_en_status_update bf_hw_en;
 	struct bf_mod_en_ctrl bf_mod_en;
+};
+
+enum {
+	BF_SOUNDING_OFF = 0,
+	BF_SOUNDING_ON = 1,
+	BF_DATA_PACKET_APPLY = 2,
+	BF_PFMU_TAG_READ = 5,
+	BF_PFMU_TAG_WRITE = 6,
+	BF_STA_REC_READ = 11,
+	BF_PHASE_CALIBRATION = 12,
+	BF_IBF_PHASE_COMP = 13,
+	BF_PROFILE_WRITE_20M_ALL = 15,
+	BF_HW_EN_UPDATE = 17,
+	BF_MOD_EN_CTRL = 20,
+	BF_FBRPT_DBG_INFO_READ = 23,
+	BF_TXSND_INFO = 24,
+	BF_CMD_TXCMD = 27,
+	BF_CFG_PHY = 28,
 };
 
 struct ra_rate {
@@ -770,17 +804,6 @@ enum {
 #define MUMIMO_DL                      BIT(2)
 #define MUMIMO_UL                      BIT(3)
 #define MUMIMO_DL_CERT                 BIT(4)
-
-enum {
-	BF_SOUNDING_ON = 1,
-	BF_PFMU_TAG_READ = 5,
-	BF_STA_REC_READ = 11,
-	BF_HW_EN_UPDATE = 17,
-	BF_MOD_EN_CTRL = 20,
-	BF_FBRPT_DBG_INFO_READ = 23,
-	BF_TXSND_INFO = 24,
-	BF_CFG_PHY = 28,
-};
 
 enum {
 	CMD_BAND_NONE,

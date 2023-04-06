@@ -295,7 +295,7 @@ __mt7996_mcu_add_uni_tlv(struct sk_buff *skb, u16 tag, u16 len)
 	return ptlv;
 }
 
-int mt7996_mcu_set_txbf_internal(struct mt7996_phy *phy, u8 action, int idx)
+int mt7996_mcu_set_txbf_internal(struct mt7996_phy *phy, u8 action, int idx, bool bfer)
 {
 	struct mt7996_dev *dev = phy->dev;
 #define MT7996_MTK_BF_MAX_SIZE	sizeof(struct bf_starec_read)
@@ -318,9 +318,8 @@ int mt7996_mcu_set_txbf_internal(struct mt7996_phy *phy, u8 action, int idx)
 
 		tlv = __mt7996_mcu_add_uni_tlv(skb, action, sizeof(*req));
 		req = (struct bf_pfmu_tag *)tlv;
-#define BFER 1
 		req->pfmu_id = idx;
-		req->bfer = BFER;
+		req->bfer = bfer;
 		req->band_idx = phy->mt76->band_idx;
 		break;
 	}
@@ -432,10 +431,36 @@ int mt7996_mcu_set_txbf_snd_info(struct mt7996_phy *phy, void *para)
 	return mt76_mcu_skb_send_msg(&phy->dev->mt76, skb, MCU_WM_UNI_CMD(BF), false);
 }
 
+static inline void
+mt7996_ibf_phase_assign(struct mt7996_dev *dev,
+			struct mt7996_ibf_cal_info *cal,
+			struct mt7996_txbf_phase *phase)
+{
+	/* fw return ibf calibrated data with
+	 * the mt7996_txbf_phase_info_5g struct for both 2G and 5G.
+	 * Therefore, memcpy cannot be used here.
+	 */
+	phase_assign(cal->group, m_t0_h, true);
+	phase_assign(cal->group, m_t1_h, true);
+	phase_assign(cal->group, m_t2_h, true);
+	phase_assign(cal->group, m_t2_h_sx2, false);
+	phase_assign_rx(cal->group, r0);
+	phase_assign_rx(cal->group, r1);
+	phase_assign_rx(cal->group, r2);
+	phase_assign_rx(cal->group, r3);
+	phase_assign_rx_g0(cal->group, r2_sx2);
+	phase_assign_rx_g0(cal->group, r3_sx2);
+	phase_assign(cal->group, r0_reserved, false);
+	phase_assign(cal->group, r1_reserved, false);
+	phase_assign(cal->group, r2_reserved, false);
+	phase_assign(cal->group, r3_reserved, false);
+	phase_assign(cal->group, r2_sx2_reserved, false);
+	phase_assign(cal->group, r3_sx2_reserved, false);
+}
+
 void
 mt7996_mcu_rx_bf_event(struct mt7996_dev *dev, struct sk_buff *skb)
 {
-#define HE_MODE 3
 	struct mt7996_mcu_bf_basic_event *event;
 
 	event = (struct mt7996_mcu_bf_basic_event *)skb->data;
@@ -470,13 +495,12 @@ mt7996_mcu_rx_bf_event(struct mt7996_dev *dev, struct sk_buff *skb)
 			 tag->t1.nr, tag->t1.nc, tag->t1.ngroup, tag->t1.lm, tag->t1.codebook,
 			 tag->t1.mob_cal_en);
 
-		if (tag->t1.lm <= HE_MODE) {
+		if (tag->t1.lm <= BF_LM_HE)
 			dev_info(dev->mt76.dev, "RU start = %d, RU end = %d\n",
 				 tag->t1.field.ru_start_id, tag->t1.field.ru_end_id);
-		} else {
+		else
 			dev_info(dev->mt76.dev, "PartialBW = %d\n",
 				 tag->t1.bw_info.partial_bw_info);
-		}
 
 		dev_info(dev->mt76.dev, "Mem Col1 = %d, Mem Row1 = %d, Mem Col2 = %d, Mem Row2 = %d\n",
 			 tag->t1.col_id1, tag->t1.row_id1, tag->t1.col_id2, tag->t1.row_id2);
@@ -727,6 +751,47 @@ mt7996_mcu_rx_bf_event(struct mt7996_dev *dev, struct sk_buff *skb)
 		}
 
 		dev_info(dev->mt76.dev, "======================================\n");
+
+		break;
+	}
+	case UNI_EVENT_BF_CAL_PHASE: {
+		struct mt7996_ibf_cal_info *cal;
+		struct mt7996_txbf_phase_out phase_out;
+		struct mt7996_txbf_phase *phase;
+
+		cal = (struct mt7996_ibf_cal_info *)skb->data;
+		phase = (struct mt7996_txbf_phase *)dev->test.txbf_phase_cal;
+		memcpy(&phase_out, &cal->phase_out, sizeof(phase_out));
+		switch (cal->cal_type) {
+		case IBF_PHASE_CAL_NORMAL:
+		case IBF_PHASE_CAL_NORMAL_INSTRUMENT:
+			/* Only calibrate group M */
+			if (cal->group_l_m_n != GROUP_M)
+				break;
+			phase = &phase[cal->group];
+			phase->status = cal->status;
+			dev_info(dev->mt76.dev, "Calibrated result = %d\n", phase->status);
+			dev_info(dev->mt76.dev, "Group %d and Group M\n", cal->group);
+			mt7996_ibf_phase_assign(dev, cal, phase);
+			break;
+		case IBF_PHASE_CAL_VERIFY:
+		case IBF_PHASE_CAL_VERIFY_INSTRUMENT:
+			dev_info(dev->mt76.dev, "Verification result = %d\n", cal->status);
+			break;
+		default:
+			break;
+		}
+
+		dev_info(dev->mt76.dev, "c0_uh = %d, c1_uh = %d, c2_uh = %d, c3_uh = %d\n",
+			 phase_out.c0_uh, phase_out.c1_uh, phase_out.c2_uh, phase_out.c3_uh);
+		dev_info(dev->mt76.dev, "c0_h = %d, c1_h = %d, c2_h = %d, c3_h = %d\n",
+			 phase_out.c0_h, phase_out.c1_h, phase_out.c2_h, phase_out.c3_h);
+		dev_info(dev->mt76.dev, "c0_mh = %d, c1_mh = %d, c2_mh = %d, c3_mh = %d\n",
+			 phase_out.c0_mh, phase_out.c1_mh, phase_out.c2_mh, phase_out.c3_mh);
+		dev_info(dev->mt76.dev, "c0_m = %d, c1_m = %d, c2_m = %d, c3_m = %d\n",
+			 phase_out.c0_m, phase_out.c1_m, phase_out.c2_m, phase_out.c3_m);
+		dev_info(dev->mt76.dev, "c0_l = %d, c1_l = %d, c2_l = %d, c3_l = %d\n",
+			 phase_out.c0_l, phase_out.c1_l, phase_out.c2_l, phase_out.c3_l);
 
 		break;
 	}

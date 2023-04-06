@@ -751,6 +751,11 @@ struct mt76_testmode_data {
 	u32 tx_time;
 	u32 tx_ipg;
 
+	u8 txbf_act;
+	u16 txbf_param[8];
+	bool is_txbf_dut;
+	bool bf_en;
+	bool bf_ever_en;
 	bool ibf;
 	bool ebf;
 

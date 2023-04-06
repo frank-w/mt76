@@ -23,6 +23,7 @@ enum {
 	TM_CHANGED_IPI_THRESHOLD,
 	TM_CHANGED_IPI_PERIOD,
 	TM_CHANGED_IPI_RESET,
+	TM_CHANGED_TXBF_ACT,
 
 	/* must be last */
 	NUM_TM_CHANGED
@@ -41,25 +42,31 @@ static const u8 tm_change_map[] = {
 	[TM_CHANGED_IPI_THRESHOLD] = MT76_TM_ATTR_IPI_THRESHOLD,
 	[TM_CHANGED_IPI_PERIOD] = MT76_TM_ATTR_IPI_PERIOD,
 	[TM_CHANGED_IPI_RESET] = MT76_TM_ATTR_IPI_RESET,
+	[TM_CHANGED_TXBF_ACT] = MT76_TM_ATTR_TXBF_ACT,
 };
 
 static void mt7996_tm_ipi_work(struct work_struct *work);
+static int mt7996_tm_txbf_apply_tx(struct mt7996_phy *phy, u16 wlan_idx,
+				   bool ebf, bool ibf, bool phase_cal);
 
 static u32 mt7996_tm_bw_mapping(enum nl80211_chan_width width, enum bw_mapping_method method)
 {
 	static const u32 width_to_bw[][NUM_BW_MAP] = {
-		[NL80211_CHAN_WIDTH_40] = {FW_CDBW_40MHZ, TM_CBW_40MHZ, 40,
+		[NL80211_CHAN_WIDTH_40] = {FW_CDBW_40MHZ, TM_CBW_40MHZ, BF_CDBW_40MHZ, 40,
 					   FIRST_CONTROL_CHAN_BITMAP_BW40},
-		[NL80211_CHAN_WIDTH_80] = {FW_CDBW_80MHZ, TM_CBW_80MHZ, 80,
+		[NL80211_CHAN_WIDTH_80] = {FW_CDBW_80MHZ, TM_CBW_80MHZ, BF_CDBW_80MHZ, 80,
 					   FIRST_CONTROL_CHAN_BITMAP_BW80},
-		[NL80211_CHAN_WIDTH_80P80] = {FW_CDBW_8080MHZ, TM_CBW_8080MHZ, 80, 0x0},
-		[NL80211_CHAN_WIDTH_160] = {FW_CDBW_160MHZ, TM_CBW_160MHZ, 160,
+		[NL80211_CHAN_WIDTH_80P80] = {FW_CDBW_8080MHZ, TM_CBW_8080MHZ, BF_CDBW_8080MHZ,
+					      80, 0x0},
+		[NL80211_CHAN_WIDTH_160] = {FW_CDBW_160MHZ, TM_CBW_160MHZ, BF_CDBW_160MHZ, 160,
 					    FIRST_CONTROL_CHAN_BITMAP_BW160},
-		[NL80211_CHAN_WIDTH_5] = {FW_CDBW_5MHZ, TM_CBW_5MHZ, 5, 0x0},
-		[NL80211_CHAN_WIDTH_10] = {FW_CDBW_10MHZ, TM_CBW_10MHZ, 10, 0x0},
-		[NL80211_CHAN_WIDTH_20] = {FW_CDBW_20MHZ, TM_CBW_20MHZ, 20, 0x0},
-		[NL80211_CHAN_WIDTH_20_NOHT] = {FW_CDBW_20MHZ, TM_CBW_20MHZ, 20, 0x0},
-		[NL80211_CHAN_WIDTH_320] = {FW_CDBW_320MHZ, TM_CBW_320MHZ, 320, 0x0},
+		[NL80211_CHAN_WIDTH_5] = {FW_CDBW_5MHZ, TM_CBW_5MHZ, BF_CDBW_5MHZ, 5, 0x0},
+		[NL80211_CHAN_WIDTH_10] = {FW_CDBW_10MHZ, TM_CBW_10MHZ, BF_CDBW_10MHZ, 10, 0x0},
+		[NL80211_CHAN_WIDTH_20] = {FW_CDBW_20MHZ, TM_CBW_20MHZ, BF_CDBW_20MHZ, 20, 0x0},
+		[NL80211_CHAN_WIDTH_20_NOHT] = {FW_CDBW_20MHZ, TM_CBW_20MHZ, BF_CDBW_20MHZ,
+						20, 0x0},
+		[NL80211_CHAN_WIDTH_320] = {FW_CDBW_320MHZ, TM_CBW_320MHZ, BF_CDBW_320MHZ,
+					    320, 0x0},
 	};
 
 	if (width >= ARRAY_SIZE(width_to_bw))
@@ -68,26 +75,26 @@ static u32 mt7996_tm_bw_mapping(enum nl80211_chan_width width, enum bw_mapping_m
 	return width_to_bw[width][method];
 }
 
-static u8 mt7996_tm_rate_to_phy(u8 tx_rate_mode)
+static u8 mt7996_tm_rate_mapping(u8 tx_rate_mode, enum rate_mapping_type type)
 {
-	static const u8 rate_to_phy[] = {
-		[MT76_TM_TX_MODE_CCK] = MT_PHY_TYPE_CCK,
-		[MT76_TM_TX_MODE_OFDM] = MT_PHY_TYPE_OFDM,
-		[MT76_TM_TX_MODE_HT] = MT_PHY_TYPE_HT,
-		[MT76_TM_TX_MODE_VHT] = MT_PHY_TYPE_VHT,
-		[MT76_TM_TX_MODE_HE_SU] = MT_PHY_TYPE_HE_SU,
-		[MT76_TM_TX_MODE_HE_EXT_SU] = MT_PHY_TYPE_HE_EXT_SU,
-		[MT76_TM_TX_MODE_HE_TB] = MT_PHY_TYPE_HE_TB,
-		[MT76_TM_TX_MODE_HE_MU] = MT_PHY_TYPE_HE_MU,
-		[MT76_TM_TX_MODE_EHT_SU] = MT_PHY_TYPE_EHT_SU,
-		[MT76_TM_TX_MODE_EHT_TRIG] = MT_PHY_TYPE_EHT_TRIG,
-		[MT76_TM_TX_MODE_EHT_MU] = MT_PHY_TYPE_EHT_MU,
+	static const u8 rate_to_phy[][NUM_RATE_MAP] = {
+		[MT76_TM_TX_MODE_CCK] = {MT_PHY_TYPE_CCK, BF_LM_LEGACY},
+		[MT76_TM_TX_MODE_OFDM] = {MT_PHY_TYPE_OFDM, BF_LM_LEGACY},
+		[MT76_TM_TX_MODE_HT] = {MT_PHY_TYPE_HT, BF_LM_HT},
+		[MT76_TM_TX_MODE_VHT] = {MT_PHY_TYPE_VHT, BF_LM_VHT},
+		[MT76_TM_TX_MODE_HE_SU] = {MT_PHY_TYPE_HE_SU, BF_LM_HE},
+		[MT76_TM_TX_MODE_HE_EXT_SU] = {MT_PHY_TYPE_HE_EXT_SU, BF_LM_HE},
+		[MT76_TM_TX_MODE_HE_TB] = {MT_PHY_TYPE_HE_TB, BF_LM_HE},
+		[MT76_TM_TX_MODE_HE_MU] = {MT_PHY_TYPE_HE_MU, BF_LM_HE},
+		[MT76_TM_TX_MODE_EHT_SU] = {MT_PHY_TYPE_EHT_SU, BF_LM_EHT},
+		[MT76_TM_TX_MODE_EHT_TRIG] = {MT_PHY_TYPE_EHT_TRIG, BF_LM_EHT},
+		[MT76_TM_TX_MODE_EHT_MU] = {MT_PHY_TYPE_EHT_MU, BF_LM_EHT},
 	};
 
 	if (tx_rate_mode > MT76_TM_TX_MODE_MAX)
 		return -EINVAL;
 
-	return rate_to_phy[tx_rate_mode];
+	return rate_to_phy[tx_rate_mode][type];
 }
 
 static int
@@ -239,7 +246,7 @@ mt7996_tm_init(struct mt7996_phy *phy, bool en)
 		INIT_DELAYED_WORK(&phy->ipi_work, mt7996_tm_ipi_work);
 }
 
-static void
+void
 mt7996_tm_update_channel(struct mt7996_phy *phy)
 {
 #define CHAN_FREQ_BW_80P80_TAG		(SET_ID(CHAN_FREQ) | BIT(16))
@@ -303,7 +310,8 @@ mt7996_tm_set_tx_frames(struct mt7996_phy *phy, bool en)
 		mt7996_tm_set(dev, SET_ID(MAC_HEADER), FRAME_CONTROL);
 		mt7996_tm_set(dev, SET_ID(SEQ_CTRL), 0);
 		mt7996_tm_set(dev, SET_ID(TX_COUNT), td->tx_count);
-		mt7996_tm_set(dev, SET_ID(TX_MODE), mt7996_tm_rate_to_phy(td->tx_rate_mode));
+		mt7996_tm_set(dev, SET_ID(TX_MODE),
+			      mt7996_tm_rate_mapping(td->tx_rate_mode, RATE_MODE_TO_PHY));
 		mt7996_tm_set(dev, SET_ID(TX_RATE), td->tx_rate_idx);
 
 		if (mt76_testmode_param_present(td, MT76_TM_ATTR_TX_POWER))
@@ -331,7 +339,8 @@ mt7996_tm_set_tx_frames(struct mt7996_phy *phy, bool en)
 
 		mt7996_tm_set(dev, SET_ID(MAX_PE), 2);
 		mt7996_tm_set(dev, SET_ID(HW_TX_MODE), 0);
-		mt7996_tm_update_channel(phy);
+		if (!td->bf_en)
+			mt7996_tm_update_channel(phy);
 
 		/* trigger firmware to start TX */
 		mt7996_tm_set(dev, SET_ID(COMMAND), RF_CMD(START_TX));
@@ -373,7 +382,8 @@ mt7996_tm_set_rx_frames(struct mt7996_phy *phy, bool en)
 			return;
 		}
 
-		mt7996_tm_update_channel(phy);
+		if (!td->bf_en)
+			mt7996_tm_update_channel(phy);
 
 		if (td->tx_rate_mode >= MT76_TM_TX_MODE_HE_MU) {
 			if (td->aid)
@@ -381,7 +391,8 @@ mt7996_tm_set_rx_frames(struct mt7996_phy *phy, bool en)
 			else
 				ret = mt7996_tm_set(dev, SET_ID(RX_MU_AID), RX_MU_DISABLE);
 		}
-		mt7996_tm_set(dev, SET_ID(TX_MODE), mt7996_tm_rate_to_phy(td->tx_rate_mode));
+		mt7996_tm_set(dev, SET_ID(TX_MODE),
+			      mt7996_tm_rate_mapping(td->tx_rate_mode, RATE_MODE_TO_PHY));
 		mt7996_tm_set(dev, SET_ID(GI), td->tx_rate_sgi);
 		mt7996_tm_set_antenna(phy, SET_ID(RX_PATH));
 		mt7996_tm_set(dev, SET_ID(MAX_PE), 2);
@@ -405,7 +416,8 @@ mt7996_tm_set_tx_cont(struct mt7996_phy *phy, bool en)
 
 	if (en) {
 		mt7996_tm_update_channel(phy);
-		mt7996_tm_set(dev, SET_ID(TX_MODE), mt7996_tm_rate_to_phy(td->tx_rate_mode));
+		mt7996_tm_set(dev, SET_ID(TX_MODE),
+			      mt7996_tm_rate_mapping(td->tx_rate_mode, RATE_MODE_TO_PHY));
 		mt7996_tm_set(dev, SET_ID(TX_RATE), td->tx_rate_idx);
 		/* fix payload is OFDM */
 		mt7996_tm_set(dev, SET_ID(CONT_WAVE_MODE), CONT_WAVE_MODE_OFDM);
@@ -1047,6 +1059,678 @@ mt7996_tm_set_ipi(struct mt7996_phy *phy)
 	return 0;
 }
 
+static int
+mt7996_tm_set_trx_mac(struct mt7996_phy *phy, u8 type, bool en)
+{
+#define UNI_TM_TRX_CTRL 0
+	struct mt7996_dev *dev = phy->dev;
+	struct mt7996_tm_trx_req req = {
+		.param_num = 1,
+		.tag = cpu_to_le16(UNI_TM_TRX_CTRL),
+		.len = cpu_to_le16(sizeof(req) - 4),
+		.param_idx = cpu_to_le16(TM_TRX_PARAM_SET_TRX),
+		.band_idx = phy->mt76->band_idx,
+		.testmode_en = 1,
+		.action = TM_TRX_ACTION_SET,
+		.set_trx = {
+			.type = type,
+			.enable = en,
+			.band_idx = phy->mt76->band_idx,
+		}
+	};
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(TESTMODE_TRX_PARAM),
+				 &req, sizeof(req), false);
+}
+
+static int
+mt7996_tm_txbf_init(struct mt7996_phy *phy, u16 *val)
+{
+#define EBF_BBP_RX_OFFSET	0x10280
+#define EBF_BBP_RX_ENABLE	(BIT(0) | BIT(15))
+	struct mt7996_dev *dev = phy->dev;
+	struct mt76_testmode_data *td = &phy->mt76->test;
+	bool enable = val[0];
+	void *phase_cal, *pfmu_data, *pfmu_tag;
+	u8 nss, band_idx = phy->mt76->band_idx;
+	enum nl80211_chan_width width = NL80211_CHAN_WIDTH_20;
+	u8 sub_addr = td->is_txbf_dut ? TXBF_DUT_MAC_SUBADDR : TXBF_GOLDEN_MAC_SUBADDR;
+	u8 peer_addr = td->is_txbf_dut ? TXBF_GOLDEN_MAC_SUBADDR : TXBF_DUT_MAC_SUBADDR;
+	u8 bss_addr = TXBF_DUT_MAC_SUBADDR;
+	u8 addr[ETH_ALEN] = {0x00, sub_addr, sub_addr, sub_addr, sub_addr, sub_addr};
+	u8 bssid[ETH_ALEN] = {0x00, bss_addr, bss_addr, bss_addr, bss_addr, bss_addr};
+	u8 peer_addrs[ETH_ALEN] = {0x00, peer_addr, peer_addr, peer_addr, peer_addr, peer_addr};
+	struct mt7996_vif *mvif = (struct mt7996_vif *)phy->monitor_vif->drv_priv;
+
+	if (!enable) {
+		td->bf_en = false;
+		return 0;
+	}
+
+	if (!dev->test.txbf_phase_cal) {
+		phase_cal = devm_kzalloc(dev->mt76.dev,
+					 sizeof(struct mt7996_txbf_phase) *
+					 MAX_PHASE_GROUP_NUM,
+					 GFP_KERNEL);
+		if (!phase_cal)
+			return -ENOMEM;
+
+		dev->test.txbf_phase_cal = phase_cal;
+	}
+
+	if (!dev->test.txbf_pfmu_data) {
+		pfmu_data = devm_kzalloc(dev->mt76.dev,
+					 sizeof(struct mt7996_pfmu_data) *
+					 MT7996_TXBF_SUBCAR_NUM,
+					 GFP_KERNEL);
+		if (!pfmu_data)
+			return -ENOMEM;
+
+		dev->test.txbf_pfmu_data = pfmu_data;
+	}
+
+	if (!dev->test.txbf_pfmu_tag) {
+		pfmu_tag = devm_kzalloc(dev->mt76.dev,
+					sizeof(struct mt7996_pfmu_tag), GFP_KERNEL);
+		if (!pfmu_tag)
+			return -ENOMEM;
+
+		dev->test.txbf_pfmu_tag = pfmu_tag;
+	}
+
+	td->bf_en = true;
+	dev->ibf = td->ibf;
+	memcpy(td->addr[0], peer_addrs, ETH_ALEN);
+	memcpy(td->addr[1], addr, ETH_ALEN);
+	memcpy(td->addr[2], bssid, ETH_ALEN);
+	memcpy(phy->monitor_vif->addr, addr, ETH_ALEN);
+	mt7996_tm_set_mac_addr(dev, td->addr[0], SET_ID(DA));
+	mt7996_tm_set_mac_addr(dev, td->addr[1], SET_ID(SA));
+	mt7996_tm_set_mac_addr(dev, td->addr[2], SET_ID(BSSID));
+
+	/* bss idx & omac idx should be set to band idx for ibf cal */
+	mvif->mt76.idx = band_idx;
+	dev->mt76.vif_mask |= BIT_ULL(mvif->mt76.idx);
+	mvif->mt76.omac_idx = band_idx;
+	phy->omac_mask |= BIT_ULL(mvif->mt76.omac_idx);
+
+	mt7996_mcu_add_dev_info(phy, phy->monitor_vif, true);
+	mt7996_mcu_add_bss_info(phy, phy->monitor_vif, true);
+
+	if (td->ibf) {
+		if (td->is_txbf_dut) {
+			/* Enable ITxBF Capability */
+			mt7996_mcu_set_txbf(dev, BF_HW_EN_UPDATE);
+			mt7996_tm_set_trx_mac(phy, TM_TRX_MAC_TX, true);
+
+			td->tx_ipg = 999;
+			td->tx_mpdu_len = 1024;
+			td->tx_antenna_mask = phy->mt76->chainmask >> dev->chainshift[band_idx];
+			nss = hweight8(td->tx_antenna_mask);
+			if (nss > 1 && nss <= 4)
+				td->tx_rate_idx = 15 + 8 * (nss - 2);
+			else
+				td->tx_rate_idx = 31;
+		} else {
+			td->tx_antenna_mask = 1;
+			td->tx_mpdu_len = 1024;
+			td->tx_rate_idx = 0;
+			mt76_set(dev, EBF_BBP_RX_OFFSET, EBF_BBP_RX_ENABLE);
+			dev_info(dev->mt76.dev, "Set BBP RX CR = %x\n",
+				 mt76_rr(dev, EBF_BBP_RX_OFFSET));
+		}
+
+		td->tx_rate_mode = MT76_TM_TX_MODE_HT;
+		td->tx_rate_sgi = 0;
+	} else {
+		if (td->is_txbf_dut) {
+			/* Enable ETxBF Capability */
+			mt7996_mcu_set_txbf(dev, BF_HW_EN_UPDATE);
+			td->tx_antenna_mask = phy->mt76->chainmask >> dev->chainshift[band_idx];
+			td->tx_spe_idx = 24 + phy->mt76->band_idx;
+			if (td->tx_rate_mode == MT76_TM_TX_MODE_VHT ||
+			    td->tx_rate_mode == MT76_TM_TX_MODE_HE_SU)
+				mt7996_tm_set(dev, SET_ID(NSS), td->tx_rate_nss);
+
+			mt7996_tm_set(dev, SET_ID(ENCODE_MODE), td->tx_rate_ldpc);
+			mt7996_tm_set(dev, SET_ID(TX_COUNT), td->tx_count);
+		} else {
+			/* Turn On BBP CR for RX */
+			mt76_set(dev, EBF_BBP_RX_OFFSET, EBF_BBP_RX_ENABLE);
+			dev_info(dev->mt76.dev, "Set BBP RX CR = %x\n",
+				 mt76_rr(dev, EBF_BBP_RX_OFFSET));
+
+			td->tx_antenna_mask = 1;
+		}
+		width = phy->mt76->chandef.width;
+
+		if (td->tx_rate_mode == MT76_TM_TX_MODE_EHT_MU)
+			td->tx_rate_mode = MT76_TM_TX_MODE_EHT_SU;
+	}
+	mt76_testmode_param_set(td, MT76_TM_ATTR_TX_ANTENNA);
+
+	mt7996_tm_set(dev, SET_ID(TX_MODE),
+		      mt7996_tm_rate_mapping(td->tx_rate_mode, RATE_MODE_TO_PHY));
+	mt7996_tm_set(dev, SET_ID(TX_RATE), td->tx_rate_idx);
+	mt7996_tm_set(dev, SET_ID(GI), td->tx_rate_sgi);
+	mt7996_tm_set(dev, SET_ID(CBW),
+		      mt7996_tm_bw_mapping(width, BW_MAP_NL_TO_FW));
+	mt7996_tm_set(dev, SET_ID(DBW),
+		      mt7996_tm_bw_mapping(width, BW_MAP_NL_TO_FW));
+	mt7996_tm_set_antenna(phy, SET_ID(TX_PATH));
+	mt7996_tm_set_antenna(phy, SET_ID(RX_PATH));
+	mt7996_tm_set(dev, SET_ID(IPG), td->tx_ipg);
+	mt7996_tm_set(dev, SET_ID(TX_LEN), td->tx_mpdu_len);
+	mt7996_tm_set(dev, SET_ID(TX_TIME), 0);
+	mt7996_tm_set(dev, SET_ID(COMMAND), RF_CMD(TX_COMMIT));
+
+	return 0;
+}
+
+static int
+mt7996_tm_txbf_phase_comp(struct mt7996_phy *phy, u16 *val)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct mt7996_tm_bf_req req = {
+		.phase_comp = {
+			.tag = cpu_to_le16(BF_IBF_PHASE_COMP),
+			.len = cpu_to_le16(sizeof(req.phase_comp)),
+			.bw = val[0],
+			.jp_band = (val[2] == 1) ? 1 : 0,
+			.band_idx = phy->mt76->band_idx,
+			.read_from_e2p = val[3],
+			.disable = val[4],
+			.group = val[2],
+		}
+	};
+	struct mt7996_txbf_phase *phase = (struct mt7996_txbf_phase *)dev->test.txbf_phase_cal;
+
+	wait_event_timeout(dev->mt76.tx_wait, phase[val[2]].status != 0, HZ);
+	if (val[2])
+		memcpy(req.phase_comp.buf, &phase[val[2]].phase_5g, sizeof(req.phase_comp.buf));
+	else
+		memcpy(req.phase_comp.buf, &phase[val[2]].phase_2g, sizeof(req.phase_comp.buf));
+
+	pr_info("ibf cal process: phase comp info\n");
+	print_hex_dump(KERN_INFO, "", DUMP_PREFIX_NONE, 16, 1,
+		       &req, sizeof(req), 0);
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(BF), &req,
+				 sizeof(req), false);
+}
+
+static int
+mt7996_tm_txbf_profile_tag_write(struct mt7996_phy *phy, u8 pfmu_idx, struct mt7996_pfmu_tag *tag)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct mt7996_tm_bf_req req = {
+		.pfmu_tag = {
+			.tag = cpu_to_le16(BF_PFMU_TAG_WRITE),
+			.len = cpu_to_le16(sizeof(req.pfmu_tag)),
+			.pfmu_id = pfmu_idx,
+			.bfer = true,
+			.band_idx = phy->mt76->band_idx,
+		}
+	};
+
+	memcpy(req.pfmu_tag.buf, tag, sizeof(*tag));
+	wait_event_timeout(dev->mt76.tx_wait, tag->t1.pfmu_idx != 0, HZ);
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(BF), &req,
+				 sizeof(req), false);
+}
+
+static int
+mt7996_tm_add_txbf_sta(struct mt7996_phy *phy, u8 pfmu_idx, u8 nr, u8 nc, bool ebf)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct mt76_testmode_data *td = &phy->mt76->test;
+	struct {
+		struct sta_req_hdr hdr;
+		struct sta_rec_bf bf;
+	} __packed req = {
+		.hdr = {
+			.bss_idx = phy->mt76->band_idx,
+			.wlan_idx_lo = to_wcid_lo(phy->mt76->band_idx + 1),
+			.tlv_num = 1,
+			.is_tlv_append = 1,
+			.muar_idx = 0,
+			.wlan_idx_hi = to_wcid_hi(phy->mt76->band_idx + 1),
+		},
+		.bf = {
+			.tag = cpu_to_le16(STA_REC_BF),
+			.len = cpu_to_le16(sizeof(req.bf)),
+			.pfmu = cpu_to_le16(pfmu_idx),
+			.sounding_phy = 1,
+			.bf_cap = ebf,
+			.ncol = nc,
+			.nrow = nr,
+			.ibf_timeout = 0xff,
+			.tx_mode = mt7996_tm_rate_mapping(td->tx_rate_mode, RATE_MODE_TO_PHY),
+		},
+	};
+	u8 ndp_rate, ndpa_rate, rept_poll_rate, bf_bw;
+
+	if (td->tx_rate_mode == MT76_TM_TX_MODE_HE_SU ||
+	    td->tx_rate_mode == MT76_TM_TX_MODE_EHT_SU) {
+		rept_poll_rate = 0x49;
+		ndpa_rate = 0x49;
+		ndp_rate = 0;
+	} else if (td->tx_rate_mode == MT76_TM_TX_MODE_VHT) {
+		rept_poll_rate = 0x9;
+		ndpa_rate = 0x9;
+		ndp_rate = 0;
+	} else {
+		rept_poll_rate = 0;
+		ndpa_rate = 0;
+		if (nr == 1)
+			ndp_rate = 8;
+		else if (nr == 2)
+			ndp_rate = 16;
+		else
+			ndp_rate = 24;
+	}
+
+	bf_bw = mt7996_tm_bw_mapping(phy->mt76->chandef.width, BW_MAP_NL_TO_BF);
+	req.bf.ndp_rate = ndp_rate;
+	req.bf.ndpa_rate = ndpa_rate;
+	req.bf.rept_poll_rate = rept_poll_rate;
+	req.bf.bw = bf_bw;
+	req.bf.tx_mode = (td->tx_rate_mode == MT76_TM_TX_MODE_EHT_SU) ? 0xf : req.bf.tx_mode;
+
+	if (ebf) {
+		req.bf.mem[0].row = 0;
+		req.bf.mem[1].row = 1;
+		req.bf.mem[2].row = 2;
+		req.bf.mem[3].row = 3;
+	} else {
+		req.bf.mem[0].row = 4;
+		req.bf.mem[1].row = 5;
+		req.bf.mem[2].row = 6;
+		req.bf.mem[3].row = 7;
+	}
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WMWA_UNI_CMD(STA_REC_UPDATE), &req,
+				 sizeof(req), true);
+}
+
+static int
+mt7996_tm_txbf_profile_update(struct mt7996_phy *phy, u16 *val, bool ebf)
+{
+#define MT_ARB_IBF_ENABLE			(BIT(0) | GENMASK(9, 8))
+	struct mt76_testmode_data *td = &phy->mt76->test;
+	struct mt7996_dev *dev = phy->dev;
+	struct mt7996_pfmu_tag *tag = dev->test.txbf_pfmu_tag;
+	u8 pfmu_idx = val[0], nc = val[2], nr;
+	int ret;
+	bool is_atenl = val[5];
+
+	if (td->tx_antenna_mask == 3)
+		nr = 1;
+	else if (td->tx_antenna_mask == 7)
+		nr = 2;
+	else
+		nr = 3;
+
+	memset(tag, 0, sizeof(*tag));
+	tag->t1.pfmu_idx = pfmu_idx;
+	tag->t1.ebf = ebf;
+	tag->t1.nr = nr;
+	tag->t1.nc = nc;
+	tag->t1.invalid_prof = true;
+	tag->t1.data_bw = mt7996_tm_bw_mapping(phy->mt76->chandef.width, BW_MAP_NL_TO_BF);
+	tag->t2.se_idx = td->tx_spe_idx;
+
+	if (ebf) {
+		tag->t1.row_id1 = 0;
+		tag->t1.row_id2 = 1;
+		tag->t1.row_id3 = 2;
+		tag->t1.row_id4 = 3;
+		tag->t1.lm = mt7996_tm_rate_mapping(td->tx_rate_mode, RATE_MODE_TO_LM);
+	} else {
+		tag->t1.row_id1 = 4;
+		tag->t1.row_id2 = 5;
+		tag->t1.row_id3 = 6;
+		tag->t1.row_id4 = 7;
+		tag->t1.lm = mt7996_tm_rate_mapping(MT76_TM_TX_MODE_OFDM, RATE_MODE_TO_LM);
+
+		tag->t2.ibf_timeout = 0xff;
+		tag->t2.ibf_nr = nr;
+		tag->t2.ibf_nc = nc;
+	}
+
+	ret = mt7996_tm_txbf_profile_tag_write(phy, pfmu_idx, tag);
+	if (ret)
+		return ret;
+
+	ret = mt7996_tm_add_txbf_sta(phy, pfmu_idx, nr, nc, ebf);
+	if (ret)
+		return ret;
+
+	if (!is_atenl && !td->ibf) {
+		mt76_set(dev, MT_ARB_TQSAXM0(phy->mt76->band_idx), MT_ARB_TQSAXM_ALTX_START_MASK);
+		dev_info(dev->mt76.dev, "Set TX queue start CR for AX management (0x%x) = 0x%x\n",
+			 MT_ARB_TQSAXM0(phy->mt76->band_idx),
+			 mt76_rr(dev, MT_ARB_TQSAXM0(phy->mt76->band_idx)));
+	} else if (!is_atenl && td->ibf && ebf) {
+		/* iBF's ebf profile update */
+		mt76_set(dev, MT_ARB_TQSAXM0(phy->mt76->band_idx), MT_ARB_IBF_ENABLE);
+		dev_info(dev->mt76.dev, "Set TX queue start CR for AX management (0x%x) = 0x%x\n",
+			 MT_ARB_TQSAXM0(phy->mt76->band_idx),
+			 mt76_rr(dev, MT_ARB_TQSAXM0(phy->mt76->band_idx)));
+	}
+
+	if (!ebf && is_atenl)
+		return mt7996_tm_txbf_apply_tx(phy, 1, false, true, true);
+
+	return 0;
+}
+
+static int
+mt7996_tm_txbf_phase_cal(struct mt7996_phy *phy, u16 *val)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct mt7996_tm_bf_req req = {
+		.phase_cal = {
+			.tag = cpu_to_le16(BF_PHASE_CALIBRATION),
+			.len = cpu_to_le16(sizeof(req.phase_cal)),
+			.group = val[0],
+			.group_l_m_n = val[1],
+			.sx2 = val[2],
+			.cal_type = val[3],
+			.lna_gain_level = val[4],
+			.band_idx = phy->mt76->band_idx,
+		},
+	};
+	struct mt7996_txbf_phase *phase = (struct mt7996_txbf_phase *)dev->test.txbf_phase_cal;
+
+	/* reset phase status before update phase cal data */
+	phase[req.phase_cal.group].status = 0;
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(BF), &req,
+				 sizeof(req), false);
+}
+
+static int
+mt7996_tm_txbf_profile_update_all(struct mt7996_phy *phy, u16 *val)
+{
+#define MT7996_TXBF_PFMU_DATA_LEN	(MT7996_TXBF_SUBCAR_NUM * sizeof(struct mt7996_pfmu_data))
+	struct mt76_testmode_data *td = &phy->mt76->test;
+	u8 nss = hweight8(td->tx_antenna_mask);
+	u16 pfmu_idx = val[0];
+	u16 subc_id = val[1];
+	u16 angle11 = val[2];
+	u16 angle21 = val[3];
+	u16 angle31 = val[4];
+	u16 angle41 = val[5];
+	s16 phi11 = 0, phi21 = 0, phi31 = 0;
+	struct mt7996_pfmu_data *pfmu_data;
+
+	if (subc_id > MT7996_TXBF_SUBCAR_NUM - 1)
+		return -EINVAL;
+
+	if (nss == 2) {
+		phi11 = (s16)(angle21 - angle11);
+	} else if (nss == 3) {
+		phi11 = (s16)(angle31 - angle11);
+		phi21 = (s16)(angle31 - angle21);
+	} else {
+		phi11 = (s16)(angle41 - angle11);
+		phi21 = (s16)(angle41 - angle21);
+		phi31 = (s16)(angle41 - angle31);
+	}
+
+	pfmu_data = (struct mt7996_pfmu_data *)phy->dev->test.txbf_pfmu_data;
+	pfmu_data = &pfmu_data[subc_id];
+
+	if (subc_id < 32)
+		pfmu_data->subc_idx = cpu_to_le16(subc_id + 224);
+	else
+		pfmu_data->subc_idx = cpu_to_le16(subc_id - 32);
+
+	pfmu_data->phi11 = cpu_to_le16(phi11);
+	pfmu_data->phi21 = cpu_to_le16(phi21);
+	pfmu_data->phi31 = cpu_to_le16(phi31);
+	if (subc_id == MT7996_TXBF_SUBCAR_NUM - 1) {
+		struct mt7996_dev *dev = phy->dev;
+		struct mt7996_tm_bf_req req = {
+			.pfmu_data_all = {
+				.tag = cpu_to_le16(BF_PROFILE_WRITE_20M_ALL),
+				.len = cpu_to_le16(sizeof(req.pfmu_data_all)),
+				.pfmu_id = pfmu_idx,
+				.band_idx = phy->mt76->band_idx,
+			},
+		};
+
+		memcpy(req.pfmu_data_all.buf, dev->test.txbf_pfmu_data, MT7996_TXBF_PFMU_DATA_LEN);
+
+		return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(BF),
+					 &req, sizeof(req), true);
+	}
+
+	return 0;
+}
+
+static int
+mt7996_tm_txbf_e2p_update(struct mt7996_phy *phy)
+{
+#define TXBF_PHASE_EEPROM_START_OFFSET		0xc00
+#define TXBF_PHASE_GROUP_EEPROM_OFFSET		0x2e
+	struct mt7996_txbf_phase *phase, *p;
+	struct mt7996_dev *dev = phy->dev;
+	u8 *eeprom = dev->mt76.eeprom.data;
+	u16 offset;
+	int i;
+
+	offset = TXBF_PHASE_EEPROM_START_OFFSET;
+	phase = (struct mt7996_txbf_phase *)dev->test.txbf_phase_cal;
+	for (i = 0; i < MAX_PHASE_GROUP_NUM; i++) {
+		p = &phase[i];
+
+		if (!p->status)
+			continue;
+
+		/* copy phase cal data to eeprom */
+		if (i)
+			memcpy(eeprom + offset, &p->phase_5g, sizeof(p->phase_5g));
+		else
+			memcpy(eeprom + offset, &p->phase_2g, sizeof(p->phase_2g));
+		offset += TXBF_PHASE_GROUP_EEPROM_OFFSET;
+	}
+
+	return 0;
+}
+
+static int
+mt7996_tm_txbf_apply_tx(struct mt7996_phy *phy, u16 wlan_idx, bool ebf,
+			bool ibf, bool phase_cal)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct mt7996_tm_bf_req req = {
+		.tx_apply = {
+			.tag = cpu_to_le16(BF_DATA_PACKET_APPLY),
+			.len = cpu_to_le16(sizeof(req.tx_apply)),
+			.wlan_idx = cpu_to_le16(wlan_idx),
+			.ebf = ebf,
+			.ibf = ibf,
+			.phase_cal = phase_cal,
+		},
+	};
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(BF), &req, sizeof(req), false);
+}
+
+static int
+mt7996_tm_txbf_set_tx(struct mt7996_phy *phy, u16 *val)
+{
+	bool bf_on = val[0], update = val[3];
+	struct mt7996_dev *dev = phy->dev;
+	struct mt7996_pfmu_tag *tag = dev->test.txbf_pfmu_tag;
+	struct mt76_testmode_data *td = &phy->mt76->test;
+
+	if (bf_on) {
+		mt7996_tm_set_rx_frames(phy, false);
+		mt7996_tm_set_tx_frames(phy, false);
+		mt7996_mcu_set_txbf_internal(phy, BF_PFMU_TAG_READ, 2, true);
+		tag->t1.invalid_prof = false;
+		mt7996_tm_txbf_profile_tag_write(phy, 2, tag);
+		td->bf_ever_en = true;
+
+		if (update)
+			mt7996_tm_txbf_apply_tx(phy, 1, 0, 1, 1);
+	} else {
+		if (!td->bf_ever_en) {
+			mt7996_tm_set_rx_frames(phy, false);
+			mt7996_tm_set_tx_frames(phy, false);
+			td->ibf = false;
+			td->ebf = false;
+
+			if (update)
+				mt7996_tm_txbf_apply_tx(phy, 1, 0, 0, 0);
+		} else {
+			td->bf_ever_en = false;
+
+			mt7996_mcu_set_txbf_internal(phy, BF_PFMU_TAG_READ, 2, true);
+			tag->t1.invalid_prof = true;
+			mt7996_tm_txbf_profile_tag_write(phy, 2, tag);
+		}
+	}
+
+	return 0;
+}
+
+static int
+mt7996_tm_trigger_sounding(struct mt7996_phy *phy, u16 *val, bool en)
+{
+	struct mt7996_dev *dev = phy->dev;
+	u8 sounding_mode = val[0];
+	u8 sta_num = val[1];
+	u32 sounding_interval = (u32)val[2] << 2;	/* input unit: 4ms */
+	u16 tag = en ? BF_SOUNDING_ON : BF_SOUNDING_OFF;
+	struct mt7996_tm_bf_req req = {
+		.sounding = {
+			.tag = cpu_to_le16(tag),
+			.len = cpu_to_le16(sizeof(req.sounding)),
+			.snd_mode = sounding_mode,
+			.sta_num = sta_num,
+			.wlan_id = {
+				cpu_to_le16(val[3]),
+				cpu_to_le16(val[4]),
+				cpu_to_le16(val[5]),
+				cpu_to_le16(val[6])
+			},
+			.snd_period = cpu_to_le32(sounding_interval),
+		},
+	};
+
+	if (sounding_mode > SOUNDING_MODE_MAX)
+		return -EINVAL;
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(BF),
+				 &req, sizeof(req), false);
+}
+
+static int
+mt7996_tm_txbf_txcmd(struct mt7996_phy *phy, u16 *val)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct mt7996_tm_bf_req req = {
+		.txcmd = {
+			.tag = cpu_to_le16(BF_CMD_TXCMD),
+			.len = cpu_to_le16(sizeof(req.txcmd)),
+			.action = val[0],
+			.bf_manual = val[1],
+			.bf_bit = val[2],
+		},
+	};
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(BF), &req, sizeof(req), false);
+}
+
+static int
+mt7996_tm_set_txbf(struct mt7996_phy *phy)
+{
+#define TXBF_IS_DUT_MASK	BIT(0)
+#define TXBF_IBF_MASK		BIT(1)
+	struct mt76_testmode_data *td = &phy->mt76->test;
+	u16 *val = td->txbf_param;
+
+	dev_info(phy->dev->mt76.dev,
+		 "ibf cal process: act = %u, val = %u, %u, %u, %u, %u, %u, %u, %u\n",
+		 td->txbf_act, val[0], val[1], val[2], val[3], val[4], val[5], val[6], val[7]);
+
+	switch (td->txbf_act) {
+	case MT76_TM_TXBF_ACT_GOLDEN_INIT:
+	case MT76_TM_TXBF_ACT_INIT:
+	case MT76_TM_TX_EBF_ACT_GOLDEN_INIT:
+	case MT76_TM_TX_EBF_ACT_INIT:
+		td->ibf = !u32_get_bits(td->txbf_act, TXBF_IBF_MASK);
+		td->ebf = true;
+		td->is_txbf_dut = !!u32_get_bits(td->txbf_act, TXBF_IS_DUT_MASK);
+		return mt7996_tm_txbf_init(phy, val);
+	case MT76_TM_TXBF_ACT_UPDATE_CH:
+		mt7996_tm_update_channel(phy);
+		break;
+	case MT76_TM_TXBF_ACT_PHASE_COMP:
+		return mt7996_tm_txbf_phase_comp(phy, val);
+	case MT76_TM_TXBF_ACT_TX_PREP:
+		return mt7996_tm_txbf_set_tx(phy, val);
+	case MT76_TM_TXBF_ACT_IBF_PROF_UPDATE:
+		return mt7996_tm_txbf_profile_update(phy, val, false);
+	case MT76_TM_TXBF_ACT_EBF_PROF_UPDATE:
+		return mt7996_tm_txbf_profile_update(phy, val, true);
+	case MT76_TM_TXBF_ACT_PHASE_CAL:
+		return mt7996_tm_txbf_phase_cal(phy, val);
+	case MT76_TM_TXBF_ACT_PROF_UPDATE_ALL_CMD:
+	case MT76_TM_TXBF_ACT_PROF_UPDATE_ALL:
+		return mt7996_tm_txbf_profile_update_all(phy, val);
+	case MT76_TM_TXBF_ACT_E2P_UPDATE:
+		return mt7996_tm_txbf_e2p_update(phy);
+	case MT76_TM_TXBF_ACT_APPLY_TX: {
+		u16 wlan_idx = val[0];
+		bool ebf = !!val[1], ibf = !!val[2], phase_cal = !!val[4];
+
+		return mt7996_tm_txbf_apply_tx(phy, wlan_idx, ebf, ibf, phase_cal);
+	}
+	case MT76_TM_TXBF_ACT_TRIGGER_SOUNDING:
+		return mt7996_tm_trigger_sounding(phy, val, true);
+	case MT76_TM_TXBF_ACT_STOP_SOUNDING:
+		memset(val, 0, sizeof(td->txbf_param));
+		return mt7996_tm_trigger_sounding(phy, val, false);
+	case MT76_TM_TXBF_ACT_PROFILE_TAG_READ:
+	case MT76_TM_TXBF_ACT_PROFILE_TAG_WRITE:
+	case MT76_TM_TXBF_ACT_PROFILE_TAG_INVALID: {
+		u8 pfmu_idx = val[0];
+		bool bfer = !!val[1];
+		struct mt7996_dev *dev = phy->dev;
+		struct mt7996_pfmu_tag *tag = dev->test.txbf_pfmu_tag;
+
+		if (!tag) {
+			dev_err(dev->mt76.dev,
+				"pfmu tag is not initialized!\n");
+			return 0;
+		}
+
+		if (td->txbf_act == MT76_TM_TXBF_ACT_PROFILE_TAG_WRITE)
+			return mt7996_tm_txbf_profile_tag_write(phy, pfmu_idx, tag);
+		else if (td->txbf_act == MT76_TM_TXBF_ACT_PROFILE_TAG_READ)
+			return mt7996_mcu_set_txbf_internal(phy, BF_PFMU_TAG_READ, pfmu_idx, bfer);
+
+		tag->t1.invalid_prof = !!val[0];
+
+		return 0;
+	}
+	case MT76_TM_TXBF_ACT_STA_REC_READ:
+		return mt7996_mcu_set_txbf_internal(phy, BF_STA_REC_READ, val[0], 0);
+	case MT76_TM_TXBF_ACT_TXCMD:
+		return mt7996_tm_txbf_txcmd(phy, val);
+	default:
+		break;
+	};
+
+	return 0;
+}
+
 static void
 mt7996_tm_update_params(struct mt7996_phy *phy, u32 changed)
 {
@@ -1086,6 +1770,8 @@ mt7996_tm_update_params(struct mt7996_phy *phy, u32 changed)
 		mt7996_tm_set_ipi(phy);
 	if (changed & BIT(TM_CHANGED_IPI_RESET))
 		mt7996_tm_ipi_hist_ctrl(phy, NULL, RDD_SET_IPI_HIST_RESET);
+	if (changed & BIT(TM_CHANGED_TXBF_ACT))
+		mt7996_tm_set_txbf(phy);
 }
 
 static int
