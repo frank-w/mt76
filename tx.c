@@ -827,12 +827,16 @@ EXPORT_SYMBOL_GPL(__mt76_set_tx_blocked);
 
 int mt76_token_consume(struct mt76_dev *dev, struct mt76_txwi_cache **ptxwi)
 {
-	int token;
+	int token, start = 0;
+
+	if (mtk_wed_device_active(&dev->mmio.wed))
+		start = dev->mmio.wed.wlan.nbuf;
 
 	spin_lock_bh(&dev->token_lock);
 
-	token = idr_alloc(&dev->token, *ptxwi, 0, dev->token_size, GFP_ATOMIC);
-	if (token >= 0)
+	token = idr_alloc(&dev->token, *ptxwi, start, start + dev->token_size,
+			  GFP_ATOMIC);
+	if (token >= start)
 		dev->token_count++;
 
 #ifdef CONFIG_NET_MEDIATEK_SOC_WED
