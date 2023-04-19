@@ -1254,4 +1254,30 @@ void mt7996_mcu_set_cert(struct mt7996_phy *phy, u8 type)
 			  sizeof(req), false);
 }
 
+int mt7996_mcu_set_vow_drr_dbg(struct mt7996_dev *dev, u32 val)
+{
+#define MT7996_VOW_DEBUG_MODE	0xe
+	struct {
+		u8 __rsv1[4];
+
+		__le16 tag;
+		__le16 len;
+		u8 __rsv2[4];
+		__le32 action;
+		__le32 val;
+		u8 __rsv3[8];
+	} __packed req = {
+		.tag = cpu_to_le16(UNI_VOW_DRR_CTRL),
+		.len = cpu_to_le16(sizeof(req) - 4),
+		.action = cpu_to_le32(MT7996_VOW_DEBUG_MODE),
+		.val = cpu_to_le32(val),
+	};
+
+	if (val & ~VOW_DRR_DBG_FLAGS)
+		return -EINVAL;
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(VOW), &req,
+				 sizeof(req), true);
+}
+
 #endif

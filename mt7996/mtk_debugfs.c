@@ -3015,6 +3015,27 @@ static int mt7996_muru_prot_thr_set(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_muru_prot_thr, NULL,
 			 mt7996_muru_prot_thr_set, "%lld\n");
 
+static int
+mt7996_red_config_set(void *data, u64 val)
+{
+	struct mt7996_dev *dev = data;
+
+	return mt7996_mcu_red_config(dev, !!val);
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_red_config, NULL,
+			 mt7996_red_config_set, "%lld\n");
+
+static int
+mt7996_vow_drr_dbg(void *data, u64 val)
+{
+	struct mt7996_dev *dev = data;
+
+	return mt7996_mcu_set_vow_drr_dbg(dev, (u32)val);
+}
+DEFINE_DEBUGFS_ATTRIBUTE(fops_vow_drr_dbg, NULL,
+			 mt7996_vow_drr_dbg, "%lld\n");
+
 int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 {
 	struct mt7996_dev *dev = phy->dev;
@@ -3092,6 +3113,8 @@ int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 				    mt7996_wtbl_read);
 
 	debugfs_create_devm_seqfile(dev->mt76.dev, "token", dir, mt7996_token_read);
+	debugfs_create_file("red", 0200, dir, dev, &fops_red_config);
+	debugfs_create_file("vow_drr_dbg", 0200, dir, dev, &fops_vow_drr_dbg);
 
 	debugfs_create_u8("sku_disable", 0600, dir, &dev->dbg.sku_disable);
 	debugfs_create_file("scs_enable", 0200, dir, phy, &fops_scs_enable);

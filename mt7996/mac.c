@@ -1176,6 +1176,13 @@ mt7996_mac_tx_free(struct mt7996_dev *dev, void *data, int len)
 
 			wcid->stats.tx_retries += tx_retries;
 			wcid->stats.tx_failed += tx_failed;
+
+			if (FIELD_GET(MT_TXFREE_INFO_STAT, info) == 2) {
+				struct mt7996_phy *mphy =
+					__mt7996_phy(dev, wcid->phy_idx);
+
+				mphy->red_drop++;
+			}
 			continue;
 		}
 

@@ -352,6 +352,7 @@ struct mt7996_phy {
 	bool has_aux_rx;
 
 	struct mt7996_scs_ctrl scs_ctrl;
+	u32 red_drop;
 
 	u8 muru_onoff;
 
@@ -718,6 +719,7 @@ int mt7996_mcu_rf_regval(struct mt7996_dev *dev, u32 regidx, u32 *val, bool set)
 int mt7996_mcu_set_hdr_trans(struct mt7996_dev *dev, bool hdr_trans);
 int mt7996_mcu_set_rro(struct mt7996_dev *dev, u16 tag, u16 val);
 int mt7996_mcu_wa_cmd(struct mt7996_dev *dev, int cmd, u32 a1, u32 a2, u32 a3);
+int mt7996_mcu_red_config(struct mt7996_dev *dev, bool enable);
 int mt7996_mcu_fw_log_2_host(struct mt7996_dev *dev, u8 type, u8 ctrl);
 int mt7996_mcu_fw_dbg_ctrl(struct mt7996_dev *dev, u32 module, u8 level);
 int mt7996_mcu_trigger_assert(struct mt7996_dev *dev);
@@ -891,11 +893,12 @@ void mt7996_mcu_set_ppdu_tx_type(struct mt7996_phy *phy, u8 ppdu_type);
 void mt7996_mcu_set_nusers_ofdma(struct mt7996_phy *phy, u8 type, u8 ofdma_user_cnt);
 void mt7996_mcu_set_cert(struct mt7996_phy *phy, u8 type);
 void mt7996_tm_update_channel(struct mt7996_phy *phy);
+
+int mt7996_mcu_set_vow_drr_dbg(struct mt7996_dev *dev, u32 val);
 #endif
 
 #ifdef CONFIG_NET_MEDIATEK_SOC_WED
 int mt7996_dma_rro_init(struct mt7996_dev *dev);
 #endif /* CONFIG_NET_MEDIATEK_SOC_WED */
-
 
 #endif

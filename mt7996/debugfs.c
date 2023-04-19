@@ -629,6 +629,7 @@ mt7996_tx_stats_show(struct seq_file *file, void *data)
 	seq_printf(file, "Tx attempts: %8u (MPDUs)\n", attempts);
 	seq_printf(file, "Tx success: %8u (MPDUs)\n", success);
 	seq_printf(file, "Tx PER: %u%%\n", per);
+	seq_printf(file, "Tx RED drop: %8u\n", phy->red_drop);
 
 	mt7996_txbf_stat_read_phy(phy, file);
 

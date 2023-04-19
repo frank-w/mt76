@@ -346,8 +346,9 @@ enum {
 enum {
 	MCU_WA_PARAM_PDMA_RX = 0x04,
 	MCU_WA_PARAM_CPU_UTIL = 0x0b,
-	MCU_WA_PARAM_RED = 0x0e,
+	MCU_WA_PARAM_RED_EN = 0x0e,
 	MCU_WA_PARAM_HW_PATH_HIF_VER = 0x2f,
+	MCU_WA_PARAM_RED_CONFIG = 0x40,
 };
 
 enum mcu_mmps_mode {
@@ -919,6 +920,7 @@ enum {
 	UNI_VOW_DRR_CTRL,
 	UNI_VOW_RX_AT_AIRTIME_EN = 0x0b,
 	UNI_VOW_RX_AT_AIRTIME_CLR_EN = 0x0e,
+	UNI_VOW_RED_ENABLE = 0x18,
 };
 
 enum {

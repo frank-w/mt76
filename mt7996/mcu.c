@@ -3155,8 +3155,8 @@ int mt7996_mcu_init_firmware(struct mt7996_dev *dev)
 	if (ret)
 		return ret;
 
-	return mt7996_mcu_wa_cmd(dev, MCU_WA_PARAM_CMD(SET),
-				 MCU_WA_PARAM_RED, 0, 0);
+	return mt7996_mcu_red_config(dev,
+			mtk_wed_device_active(&dev->mt76.mmio.wed));
 }
 
 int mt7996_mcu_init(struct mt7996_dev *dev)
@@ -3186,6 +3186,83 @@ void mt7996_mcu_exit(struct mt7996_dev *dev)
 			MT_TOP_LPCR_HOST_FW_OWN);
 out:
 	skb_queue_purge(&dev->mt76.mcu.res_q);
+}
+
+static int mt7996_mcu_wa_red_config(struct mt7996_dev *dev)
+{
+#define RED_TOKEN_SRC_CNT	4
+#define RED_TOKEN_CONFIG	2
+	struct {
+		__le32 arg0;
+		__le32 arg1;
+		__le32 arg2;
+
+		u8 mode;
+		u8 version;
+		u8 _rsv[4];
+		__le16 len;
+
+		__le16 tcp_offset;
+		__le16 priority_offset;
+		__le16 token_per_src[RED_TOKEN_SRC_CNT];
+		__le16 token_thr_per_src[RED_TOKEN_SRC_CNT];
+
+		u8 _rsv2[604];
+	} __packed req = {
+		.arg0 = cpu_to_le32(MCU_WA_PARAM_RED_CONFIG),
+
+		.mode = RED_TOKEN_CONFIG,
+		.len = cpu_to_le16(sizeof(req) - sizeof(__le32) * 3),
+
+		.tcp_offset = cpu_to_le16(200),
+		.priority_offset = cpu_to_le16(255),
+	};
+	u8 i;
+
+	for (i = 0; i < RED_TOKEN_SRC_CNT; i++) {
+		req.token_per_src[i] = cpu_to_le16(MT7996_TOKEN_SIZE);
+		req.token_thr_per_src[i] = cpu_to_le16(MT7996_TOKEN_SIZE);
+	}
+
+	if (!mtk_wed_device_active(&dev->mt76.mmio.wed))
+		req.token_per_src[RED_TOKEN_SRC_CNT - 1] =
+			cpu_to_le16(MT7996_TOKEN_SIZE - MT7996_HW_TOKEN_SIZE);
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WA_PARAM_CMD(SET),
+				 &req, sizeof(req), false);
+}
+
+int mt7996_mcu_red_config(struct mt7996_dev *dev, bool enable)
+{
+#define RED_DISABLE		0
+#define RED_BY_WA_ENABLE	2
+	struct {
+		u8 __rsv1[4];
+
+		__le16 tag;
+		__le16 len;
+		u8 enable;
+		u8 __rsv2[3];
+	} __packed req = {
+		.tag = cpu_to_le16(UNI_VOW_RED_ENABLE),
+		.len = cpu_to_le16(sizeof(req) - 4),
+		.enable = enable ? RED_BY_WA_ENABLE : RED_DISABLE,
+	};
+	int ret;
+
+	ret = mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(VOW), &req,
+				 sizeof(req), true);
+
+	if (ret)
+		return ret;
+
+	ret = mt7996_mcu_wa_cmd(dev, MCU_WA_PARAM_CMD(SET),
+				MCU_WA_PARAM_RED_EN, enable, 0);
+
+	if (ret || !enable)
+		return ret;
+
+	return mt7996_mcu_wa_red_config(dev);
 }
 
 int mt7996_mcu_set_hdr_trans(struct mt7996_dev *dev, bool hdr_trans)
