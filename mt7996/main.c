@@ -737,6 +737,10 @@ int mt7996_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 	mt7996_mac_wtbl_update(dev, idx,
 			       MT_WTBL_UPDATE_ADM_COUNT_CLEAR);
 
+#ifdef CONFIG_MTK_VENDOR
+	mt7996_vendor_amnt_sta_remove(mvif->phy, sta);
+#endif
+
 	ret = mt7996_mcu_add_sta(dev, vif, sta, true);
 	if (ret)
 		return ret;

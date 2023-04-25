@@ -259,6 +259,34 @@ struct mt7996_wed_rro_session_id {
 	u16 id;
 };
 
+#ifdef CONFIG_MTK_VENDOR
+#define MT7996_AIR_MONITOR_MAX_ENTRY	16
+#define MT7996_AIR_MONITOR_MAX_GROUP	(MT7996_AIR_MONITOR_MAX_ENTRY >> 1)
+
+struct mt7996_air_monitor_group {
+	bool enable;
+	bool used[2];
+};
+
+struct mt7996_air_monitor_entry {
+	bool enable;
+
+	u8 group_idx;
+	u8 group_used_idx;
+	u8 muar_idx;
+	u8 addr[ETH_ALEN];
+	u32 last_seen;
+	s8 rssi[4];
+	struct ieee80211_sta *sta;
+};
+
+struct mt7996_air_monitor_ctrl {
+	u8 enable;
+	struct mt7996_air_monitor_group group[MT7996_AIR_MONITOR_MAX_GROUP];
+	struct mt7996_air_monitor_entry entry[MT7996_AIR_MONITOR_MAX_ENTRY];
+};
+#endif
+
 struct mt7996_phy {
 	struct mt76_phy *mt76;
 	struct mt7996_dev *dev;
@@ -310,6 +338,10 @@ struct mt7996_phy {
 
 		u8 spe_idx;
 	} test;
+#endif
+#ifdef CONFIG_MTK_VENDOR
+	spinlock_t amnt_lock;
+	struct mt7996_air_monitor_ctrl amnt_ctrl;
 #endif
 };
 
@@ -738,6 +770,9 @@ u32 mt7996_wed_init_buf(void *ptr, dma_addr_t phys, int token_id);
 #ifdef CONFIG_MTK_VENDOR
 void mt7996_set_wireless_vif(void *data, u8 *mac, struct ieee80211_vif *vif);
 void mt7996_vendor_register(struct mt7996_phy *phy);
+void mt7996_vendor_amnt_fill_rx(struct mt7996_phy *phy, struct sk_buff *skb);
+int mt7996_vendor_amnt_sta_remove(struct mt7996_phy *phy,
+				  struct ieee80211_sta *sta);
 #endif
 
 #ifdef CONFIG_MTK_DEBUG

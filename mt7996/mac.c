@@ -679,6 +679,10 @@ mt7996_mac_fill_rx(struct mt7996_dev *dev, enum mt76_rxq_id q,
 			if (ieee80211_has_a4(fc) && is_mesh && status->amsdu)
 				*qos &= ~IEEE80211_QOS_CTL_A_MSDU_PRESENT;
 		}
+#ifdef CONFIG_MTK_VENDOR
+		if (phy->amnt_ctrl.enable && !ieee80211_is_beacon(fc))
+			mt7996_vendor_amnt_fill_rx(phy, skb);
+#endif
 	} else {
 		status->flag |= RX_FLAG_8023;
 		mt7996_wed_check_ppe(dev, &dev->mt76.q_rx[q], msta, skb,
