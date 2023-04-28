@@ -469,8 +469,10 @@ mt7996_mac_fill_rx(struct mt7996_dev *dev, enum mt76_rxq_id q,
 		return -EINVAL;
 
 	/* ICV error or CCMP/BIP/WPI MIC error */
-	if (rxd1 & MT_RXD1_NORMAL_ICV_ERR)
+	if (rxd1 & MT_RXD1_NORMAL_ICV_ERR) {
+		mphy->rx_stats.rx_icv_error++;
 		status->flag |= RX_FLAG_ONLY_MONITOR;
+	}
 
 	unicast = FIELD_GET(MT_RXD3_NORMAL_ADDR_TYPE, rxd3) == MT_RXD3_NORMAL_U2M;
 	idx = FIELD_GET(MT_RXD1_NORMAL_WLAN_IDX, rxd1);
@@ -501,11 +503,15 @@ mt7996_mac_fill_rx(struct mt7996_dev *dev, enum mt76_rxq_id q,
 	    !(csum_status & (BIT(0) | BIT(2) | BIT(3))))
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 
-	if (rxd1 & MT_RXD3_NORMAL_FCS_ERR)
+	if (rxd1 & MT_RXD3_NORMAL_FCS_ERR) {
+		mphy->rx_stats.rx_fcs_error++;
 		status->flag |= RX_FLAG_FAILED_FCS_CRC;
+	}
 
-	if (rxd1 & MT_RXD1_NORMAL_TKIP_MIC_ERR)
+	if (rxd1 & MT_RXD1_NORMAL_TKIP_MIC_ERR) {
+		mphy->rx_stats.rx_tkip_mic_error++;
 		status->flag |= RX_FLAG_MMIC_ERROR;
+	}
 
 	if (FIELD_GET(MT_RXD2_NORMAL_SEC_MODE, rxd2) != 0 &&
 	    !(rxd1 & (MT_RXD1_NORMAL_CLM | MT_RXD1_NORMAL_CM))) {
@@ -1414,8 +1420,10 @@ void mt7996_queue_rx_skb(struct mt76_dev *mdev, enum mt76_rxq_id q,
 			 struct sk_buff *skb, u32 *info)
 {
 	struct mt7996_dev *dev = container_of(mdev, struct mt7996_dev, mt76);
+	struct mt76_phy *phy;
 	__le32 *rxd = (__le32 *)skb->data;
 	__le32 *end = (__le32 *)&skb->data[skb->len];
+	u8 band_idx;
 	enum rx_pkt_type type;
 
 	type = le32_get_bits(rxd[0], MT_RXD0_PKT_TYPE);
@@ -1457,6 +1465,10 @@ void mt7996_queue_rx_skb(struct mt76_dev *mdev, enum mt76_rxq_id q,
 		}
 		fallthrough;
 	default:
+		band_idx = le32_get_bits(rxd[1], MT_RXD1_NORMAL_BAND_IDX);
+		phy = mt76_dev_phy(mdev, band_idx);
+		if (likely(phy))
+			phy->rx_stats.rx_rxd_drop++;
 		dev_kfree_skb(skb);
 		break;
 	}

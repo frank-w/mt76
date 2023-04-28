@@ -2854,6 +2854,46 @@ mt7996_sr_scene_cond_show(struct seq_file *file, void *data)
 }
 DEFINE_SHOW_ATTRIBUTE(mt7996_sr_scene_cond);
 
+static int mt7996_rx_counters(struct seq_file *s, void *data)
+{
+	struct mt7996_dev *dev = dev_get_drvdata(s->private);
+	u32 rx_mac80211 = 0;
+	int i = 0;
+
+	for (i = 0; i < __MT_MAX_BAND; i++) {
+		struct mt76_phy *phy = mt76_dev_phy(&dev->mt76, i);
+
+		if (!phy)
+			continue;
+
+		seq_printf(s, "\n==========PHY%d==========\n", i);
+
+#define SEQ_PRINT(_str, _rx_param) do {					\
+		seq_printf(s, _str"\n", phy->rx_stats._rx_param);	\
+	} while (0)
+
+		SEQ_PRINT("Rx to mac80211: %u", rx_mac80211);
+		SEQ_PRINT("Rx drop: %u", rx_drop);
+		SEQ_PRINT("Rx drop due to RXD type error: %u", rx_rxd_drop);
+		SEQ_PRINT("Rx duplicated drop: %u", rx_dup_drop);
+		SEQ_PRINT("Rx agg miss: %u", rx_agg_miss);
+		SEQ_PRINT("Rx ICV error: %u", rx_icv_error);
+		SEQ_PRINT("Rx FCS error: %u", rx_fcs_error);
+		SEQ_PRINT("Rx TKIP MIC error: %u", rx_tkip_mic_error);
+		SEQ_PRINT("Rx PN/IV error: %u", rx_pn_iv_error);
+#undef SEQ_PRINT
+
+		rx_mac80211 += phy->rx_stats.rx_mac80211;
+	}
+
+	seq_printf(s, "\n==========SUM==========\n");
+	seq_printf(s, "Rx to kernel: %u\n", dev->mt76.rx_kernel);
+	seq_printf(s, "Rx to mac80211: %u\n", rx_mac80211);
+
+
+	return 0;
+}
+
 int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 {
 	struct mt7996_dev *dev = phy->dev;
@@ -2917,6 +2957,8 @@ int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 
 	debugfs_create_devm_seqfile(dev->mt76.dev, "tr_info", dir,
 				    mt7996_trinfo_read);
+	debugfs_create_devm_seqfile(dev->mt76.dev, "rx_counters", dir,
+				    mt7996_rx_counters);
 	debugfs_create_file("txpower_level", 0600, dir, phy, &fops_txpower_level);
 	debugfs_create_file("txpower_info", 0600, dir, phy, &mt7996_txpower_info_fops);
 	debugfs_create_file("txpower_sku", 0600, dir, phy, &mt7996_txpower_sku_fops);

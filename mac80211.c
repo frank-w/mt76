@@ -784,6 +784,7 @@ static void mt76_rx_release_amsdu(struct mt76_phy *phy, enum mt76_rxq_id q)
 		}
 
 		if (ether_addr_equal(skb->data + offset, rfc1042_header)) {
+			phy->rx_stats.rx_drop++;
 			dev_kfree_skb(skb);
 			return;
 		}
@@ -1100,10 +1101,16 @@ mt76_rx_convert(struct mt76_dev *dev, struct sk_buff *skb,
 
 	*sta = wcid_to_sta(mstat.wcid);
 	*hw = mt76_phy_hw(dev, mstat.phy_idx);
+
+	if ((mstat.flag & RX_FLAG_8023) || ieee80211_is_data_qos(hdr->frame_control)) {
+		struct mt76_phy *phy = mt76_dev_phy(dev, mstat.phy_idx);
+
+		phy->rx_stats.rx_mac80211++;
+	}
 }
 
 static void
-mt76_check_ccmp_pn(struct sk_buff *skb)
+mt76_check_ccmp_pn(struct mt76_dev *dev, struct sk_buff *skb)
 {
 	struct mt76_rx_status *status = (struct mt76_rx_status *)skb->cb;
 	struct mt76_wcid *wcid = status->wcid;
@@ -1150,7 +1157,11 @@ skip_hdr_check:
 	ret = memcmp(status->iv, wcid->rx_key_pn[security_idx],
 		     sizeof(status->iv));
 	if (ret <= 0) {
+		struct mt76_phy *phy = mt76_dev_phy(dev, status->phy_idx);
+
+		phy->rx_stats.rx_pn_iv_error++;
 		status->flag |= RX_FLAG_ONLY_MONITOR;
+
 		return;
 	}
 
@@ -1331,7 +1342,7 @@ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 	while ((skb = __skb_dequeue(frames)) != NULL) {
 		struct sk_buff *nskb = skb_shinfo(skb)->frag_list;
 
-		mt76_check_ccmp_pn(skb);
+		mt76_check_ccmp_pn(dev, skb);
 		skb_shinfo(skb)->frag_list = NULL;
 		mt76_rx_convert(dev, skb, &hw, &sta);
 		ieee80211_rx_list(hw, sta, skb, &list);
@@ -1354,6 +1365,7 @@ void mt76_rx_complete(struct mt76_dev *dev, struct sk_buff_head *frames,
 	}
 
 	list_for_each_entry_safe(skb, tmp, &list, list) {
+		dev->rx_kernel++;
 		skb_list_del_init(skb);
 		napi_gro_receive(napi, skb);
 	}

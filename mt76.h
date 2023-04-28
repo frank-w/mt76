@@ -422,6 +422,7 @@ struct mt76_rx_tid {
 	struct rcu_head rcu_head;
 
 	struct mt76_dev *dev;
+	u8 band_idx;
 
 	spinlock_t lock;
 	struct delayed_work reorder_work;
@@ -853,6 +854,19 @@ struct mt76_phy {
 		bool al;
 		u8 pin;
 	} leds;
+
+	struct {
+		u32 rx_mac80211;
+
+		u32 rx_drop;
+		u32 rx_rxd_drop;
+		u32 rx_dup_drop;
+		u32 rx_agg_miss;
+		u32 rx_icv_error;
+		u32 rx_fcs_error;
+		u32 rx_tkip_mic_error;
+		u32 rx_pn_iv_error;
+	} rx_stats;
 };
 
 struct mt76_dev {
@@ -958,6 +972,7 @@ struct mt76_dev {
 	};
 
 	const char *bin_file_name;
+	u32 rx_kernel;
 };
 
 /* per-phy stats.  */

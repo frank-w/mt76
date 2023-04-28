@@ -33,10 +33,13 @@ mt76_rx_aggr_release_frames(struct mt76_rx_tid *tid,
 			    struct sk_buff_head *frames,
 			    u16 head)
 {
+	struct mt76_phy *phy = mt76_dev_phy(tid->dev, tid->band_idx);
 	int idx;
 
 	while (ieee80211_sn_less(tid->head, head)) {
 		idx = tid->head % tid->size;
+		if (!tid->reorder_buf[idx])
+			phy->rx_stats.rx_agg_miss++;
 		mt76_aggr_release(tid, frames, idx);
 	}
 }
@@ -151,6 +154,7 @@ void mt76_rx_aggr_reorder(struct sk_buff *skb, struct sk_buff_head *frames)
 	struct mt76_wcid *wcid = status->wcid;
 	struct ieee80211_sta *sta;
 	struct mt76_rx_tid *tid;
+	struct mt76_phy *phy;
 	bool sn_less;
 	u16 seqno, head, size, idx;
 	u8 tidno = status->qos_ctl & IEEE80211_QOS_CTL_TID_MASK;
@@ -186,6 +190,7 @@ void mt76_rx_aggr_reorder(struct sk_buff *skb, struct sk_buff_head *frames)
 	head = tid->head;
 	seqno = status->seqno;
 	size = tid->size;
+	phy = mt76_dev_phy(tid->dev, tid->band_idx);
 	sn_less = ieee80211_sn_less(seqno, head);
 
 	if (!tid->started) {
@@ -197,6 +202,7 @@ void mt76_rx_aggr_reorder(struct sk_buff *skb, struct sk_buff_head *frames)
 
 	if (sn_less) {
 		__skb_unlink(skb, frames);
+		phy->rx_stats.rx_dup_drop++;
 		dev_kfree_skb(skb);
 		goto out;
 	}
@@ -223,6 +229,7 @@ void mt76_rx_aggr_reorder(struct sk_buff *skb, struct sk_buff_head *frames)
 
 	/* Discard if the current slot is already in use */
 	if (tid->reorder_buf[idx]) {
+		phy->rx_stats.rx_dup_drop++;
 		dev_kfree_skb(skb);
 		goto out;
 	}
@@ -254,6 +261,7 @@ int mt76_rx_aggr_start(struct mt76_dev *dev, struct mt76_wcid *wcid, u8 tidno,
 	tid->head = ssn;
 	tid->size = size;
 	tid->num = tidno;
+	tid->band_idx = wcid->phy_idx;
 	INIT_DELAYED_WORK(&tid->reorder_work, mt76_rx_aggr_reorder_work);
 	spin_lock_init(&tid->lock);
 
