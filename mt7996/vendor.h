@@ -6,6 +6,7 @@
 enum mtk_nl80211_vendor_subcmds {
 	MTK_NL80211_VENDOR_SUBCMD_AMNT_CTRL = 0xae,
 	MTK_NL80211_VENDOR_SUBCMD_MU_CTRL = 0xc5,
+	MTK_NL80211_VENDOR_SUBCMD_BSS_COLOR_CTRL = 0xca,
 };
 
 enum mtk_vendor_attr_mu_ctrl {
@@ -57,5 +58,15 @@ enum mtk_vendor_attr_mnt_dump {
 		NUM_MTK_VENDOR_ATTRS_AMNT_DUMP - 1
 };
 
+enum mtk_vendor_attr_bss_color_ctrl {
+	MTK_VENDOR_ATTR_BSS_COLOR_CTRL_UNSPEC,
+
+	MTK_VENDOR_ATTR_AVAL_BSS_COLOR_BMP,
+
+	/* keep last */
+	NUM_MTK_VENDOR_ATTRS_BSS_COLOR_CTRL,
+	MTK_VENDOR_ATTR_BSS_COLOR_CTRL_MAX =
+		NUM_MTK_VENDOR_ATTRS_BSS_COLOR_CTRL - 1
+};
 
 #endif
