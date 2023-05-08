@@ -1798,6 +1798,7 @@ mt7996_mac_full_reset(struct mt7996_dev *dev)
 		cancel_delayed_work_sync(&phy2->mt76->mac_work);
 	if (phy3)
 		cancel_delayed_work_sync(&phy3->mt76->mac_work);
+	cancel_delayed_work_sync(&dev->scs_work);
 
 	mutex_lock(&dev->mt76.mutex);
 	for (i = 0; i < 10; i++) {
@@ -1833,6 +1834,7 @@ mt7996_mac_full_reset(struct mt7996_dev *dev)
 		ieee80211_queue_delayed_work(phy3->mt76->hw,
 					     &phy3->mt76->mac_work,
 					     MT7996_WATCHDOG_TIME);
+	ieee80211_queue_delayed_work(mt76_hw(dev), &dev->scs_work, HZ);
 }
 
 void mt7996_mac_reset_work(struct work_struct *work)

@@ -73,10 +73,16 @@ int mt7996_run(struct ieee80211_hw *hw)
 	if (ret)
 		goto out;
 
+	ret = mt7996_mcu_set_scs(phy, SCS_ENABLE);
+	if (ret)
+		goto out;
+
 	set_bit(MT76_STATE_RUNNING, &phy->mt76->state);
 
 	ieee80211_queue_delayed_work(hw, &phy->mt76->mac_work,
 				     MT7996_WATCHDOG_TIME);
+
+	ieee80211_queue_delayed_work(mt76_hw(dev), &dev->scs_work, HZ);
 
 	if (!running)
 		mt7996_mac_reset_counters(phy);
@@ -105,6 +111,7 @@ static void mt7996_stop(struct ieee80211_hw *hw)
 	struct mt7996_phy *phy = mt7996_hw_phy(hw);
 
 	cancel_delayed_work_sync(&phy->mt76->mac_work);
+	cancel_delayed_work_sync(&dev->scs_work);
 
 	mutex_lock(&dev->mt76.mutex);
 

@@ -2407,6 +2407,16 @@ static int mt7996_token_read(struct seq_file *s, void *data)
 	return 0;
 }
 
+static int
+mt7996_scs_enable_set(void *data, u64 val)
+{
+	struct mt7996_phy *phy = data;
+
+	return mt7996_mcu_set_scs(phy, (u8) val);
+}
+DEFINE_DEBUGFS_ATTRIBUTE(fops_scs_enable, NULL,
+			 mt7996_scs_enable_set, "%lld\n");
+
 int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 {
 	struct mt7996_dev *dev = phy->dev;
@@ -2477,6 +2487,7 @@ int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 	debugfs_create_devm_seqfile(dev->mt76.dev, "token", dir, mt7996_token_read);
 
 	debugfs_create_u8("sku_disable", 0600, dir, &dev->dbg.sku_disable);
+	debugfs_create_file("scs_enable", 0200, dir, phy, &fops_scs_enable);
 
 	return 0;
 }

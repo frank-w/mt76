@@ -4624,3 +4624,108 @@ int mt7996_mcu_set_tx_power_ctrl(struct mt7996_phy *phy, u8 power_ctrl_id, u8 da
 	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(TXPOWER),
 				 &req, sizeof(req), false);
 }
+
+int mt7996_mcu_set_scs_stats(struct mt7996_phy *phy)
+{
+	struct mt7996_scs_ctrl ctrl = phy->scs_ctrl;
+	struct {
+		u8 band_idx;
+		u8 _rsv[3];
+
+		__le16 tag;
+		__le16 len;
+
+		u8 _rsv2[6];
+		s8 min_rssi;
+		u8 _rsv3;
+	} __packed req = {
+		.band_idx = phy->mt76->band_idx,
+		.tag = cpu_to_le16(UNI_CMD_SCS_SEND_DATA),
+		.len = cpu_to_le16(sizeof(req) - 4),
+
+		.min_rssi = ctrl.sta_min_rssi,
+	};
+
+	return mt76_mcu_send_msg(&phy->dev->mt76, MCU_WM_UNI_CMD(SCS),
+				 &req, sizeof(req), false);
+}
+
+void mt7996_sta_rssi_work(void *data, struct ieee80211_sta *sta)
+{
+	struct mt7996_sta *msta = (struct mt7996_sta *)sta->drv_priv;
+	struct mt7996_phy *poll_phy = (struct mt7996_phy *) data;
+
+	if (poll_phy->scs_ctrl.sta_min_rssi > msta->ack_signal)
+		poll_phy->scs_ctrl.sta_min_rssi = msta->ack_signal;
+}
+
+void mt7996_mcu_scs_sta_poll(struct work_struct *work)
+{
+	struct mt7996_dev *dev = container_of(work, struct mt7996_dev,
+				 scs_work.work);
+	bool scs_enable_flag = false;
+	u8 i;
+
+	for (i = 0; i < __MT_MAX_BAND; i++) {
+		struct mt7996_phy *phy;
+
+		switch (i) {
+		case MT_BAND0:
+			phy = dev->mphy.priv;
+			break;
+		case MT_BAND1:
+			phy = mt7996_phy2(dev);
+			break;
+		case MT_BAND2:
+			phy = mt7996_phy3(dev);
+			break;
+		default:
+			phy = NULL;
+			break;
+		}
+
+		if (!phy || !test_bit(MT76_STATE_RUNNING, &phy->mt76->state) ||
+		    !phy->scs_ctrl.scs_enable)
+			continue;
+
+		ieee80211_iterate_stations_atomic(phy->mt76->hw,
+						  mt7996_sta_rssi_work, phy);
+
+		scs_enable_flag = true;
+		if (mt7996_mcu_set_scs_stats(phy))
+			dev_err(dev->mt76.dev, "Failed to send scs mcu cmd\n");
+		phy->scs_ctrl.sta_min_rssi = 0;
+	}
+
+	if (scs_enable_flag)
+		ieee80211_queue_delayed_work(mt76_hw(dev), &dev->scs_work, HZ);
+}
+
+
+int mt7996_mcu_set_scs(struct mt7996_phy *phy, u8 enable)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct {
+		u8 band_idx;
+		u8 _rsv[3];
+
+		__le16 tag;
+		__le16 len;
+
+		u8 scs_enable;
+		u8 _rsv2[3];
+	} __packed req = {
+		.band_idx = phy->mt76->band_idx,
+		.tag = cpu_to_le16(UNI_CMD_SCS_ENABLE),
+		.len = cpu_to_le16(sizeof(req) - 4),
+		.scs_enable = enable,
+	};
+
+	phy->scs_ctrl.scs_enable = enable;
+
+	if (enable == SCS_ENABLE)
+		ieee80211_queue_delayed_work(mt76_hw(dev), &dev->scs_work, HZ);
+
+	return mt76_mcu_send_msg(&phy->dev->mt76, MCU_WM_UNI_CMD(SCS),
+				 &req, sizeof(req), false);
+}

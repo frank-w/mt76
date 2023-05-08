@@ -1374,6 +1374,7 @@ int mt7996_register_device(struct mt7996_dev *dev)
 	dev->mt76.phy.priv = &dev->phy;
 	INIT_WORK(&dev->rc_work, mt7996_mac_sta_rc_work);
 	INIT_DELAYED_WORK(&dev->mphy.mac_work, mt7996_mac_work);
+	INIT_DELAYED_WORK(&dev->scs_work, mt7996_mcu_scs_sta_poll);
 	INIT_LIST_HEAD(&dev->sta_rc_list);
 	INIT_LIST_HEAD(&dev->twt_list);
 
