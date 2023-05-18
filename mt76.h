@@ -438,6 +438,7 @@ struct mt76_rx_tid {
 	u16 nframes;
 
 	u8 num;
+	u16 session_id;
 
 	u8 started:1, stopped:1, timer_pending:1;
 

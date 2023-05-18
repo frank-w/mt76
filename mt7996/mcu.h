@@ -298,6 +298,52 @@ struct mt7996_mcu_thermal_notify {
 	u8 __rsv2[4];
 } __packed;
 
+struct mt7996_mcu_rro_event {
+	struct mt7996_mcu_rxd rxd;
+
+	u8 __rsv1[4];
+
+	__le16 tag;
+	__le16 len;
+} __packed;
+
+struct mt7996_mcu_rro_ba {
+	__le16 tag;
+	__le16 len;
+
+	__le16 wlan_id;
+	u8 tid;
+	u8 __rsv1;
+	__le32 status;
+	__le16 session_id;
+	u8 __rsv2[2];
+} __packed;
+
+struct mt7996_mcu_rro_ba_del_chk_done {
+	__le16 tag;
+	__le16 len;
+
+	__le16 session_id;
+	__le16 mld_id;
+	u8 tid;
+	u8 __rsv[3];
+} __packed;
+
+enum  {
+	UNI_RRO_BA_SESSION_STATUS = 0,
+	UNI_RRO_BA_SESSION_TBL	= 1,
+	UNI_RRO_BA_SESSION_DEL_CHK_DONE = 2,
+	UNI_RRO_BA_SESSION_MAX_NUM
+};
+
+struct mt7996_mcu_rro_del_ba {
+	struct mt7996_mcu_rro_event event;
+
+	u8  wlan_idx;
+	u8  tid;
+	u8 __rsv2[2];
+};
+
 enum mt7996_chan_mib_offs {
 	UNI_MIB_OBSS_AIRTIME = 26,
 	UNI_MIB_NON_WIFI_TIME = 27,
