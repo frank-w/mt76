@@ -2083,14 +2083,35 @@ void mt7996_mac_dump_work(struct work_struct *work)
 	struct mt7996_dev *dev;
 
 	dev = container_of(work, struct mt7996_dev, dump_work);
-	if (READ_ONCE(dev->recovery.state) & MT_MCU_CMD_WA_WDT)
+	if (dev->dump_state == MT7996_COREDUMP_MANUAL_WA ||
+	    READ_ONCE(dev->recovery.state) & MT_MCU_CMD_WA_WDT)
 		mt7996_mac_fw_coredump(dev, MT7996_RAM_TYPE_WA);
 
-	if (READ_ONCE(dev->recovery.state) & MT_MCU_CMD_WM_WDT)
+	if (dev->dump_state == MT7996_COREDUMP_MANUAL_WM ||
+	    READ_ONCE(dev->recovery.state) & MT_MCU_CMD_WM_WDT)
 		mt7996_mac_fw_coredump(dev, MT7996_RAM_TYPE_WM);
 
-	queue_work(dev->mt76.wq, &dev->reset_work);
+	if (READ_ONCE(dev->recovery.state) & MT_MCU_CMD_WDT_MASK)
+		queue_work(dev->mt76.wq, &dev->reset_work);
+
+	dev->dump_state = MT7996_COREDUMP_IDLE;
 }
+
+void mt7996_coredump(struct mt7996_dev *dev, u8 state)
+{
+	if (state == MT7996_COREDUMP_IDLE ||
+	    state >= __MT7996_COREDUMP_TYPE_MAX)
+		return;
+
+	if (dev->dump_state != MT7996_COREDUMP_IDLE)
+		return;
+
+	dev->dump_state = state;
+	dev_info(dev->mt76.dev, "%s attempting grab coredump\n",
+		 wiphy_name(dev->mt76.hw->wiphy));
+
+	queue_work(dev->mt76.wq, &dev->dump_work);
+ }
 
 void mt7996_reset(struct mt7996_dev *dev)
 {
@@ -2109,6 +2130,7 @@ void mt7996_reset(struct mt7996_dev *dev)
 
 		mt7996_irq_disable(dev, MT_INT_MCU_CMD);
 		queue_work(dev->mt76.wq, &dev->dump_work);
+		mt7996_coredump(dev, MT7996_COREDUMP_AUTO);
 		return;
 	}
 

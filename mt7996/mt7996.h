@@ -139,6 +139,14 @@ enum mt7996_ram_type {
 	__MT7996_RAM_TYPE_MAX,
 };
 
+enum mt7996_coredump_state {
+	MT7996_COREDUMP_IDLE = 0,
+	MT7996_COREDUMP_MANUAL_WA,
+	MT7996_COREDUMP_MANUAL_WM,
+	MT7996_COREDUMP_AUTO,
+	__MT7996_COREDUMP_TYPE_MAX,
+};
+
 enum mt7996_txq_id {
 	MT7996_TXQ_FWDL = 16,
 	MT7996_TXQ_MCU_WM,
@@ -388,6 +396,7 @@ struct mt7996_dev {
 
 	/* protects coredump data */
 	struct mutex dump_mutex;
+	u8 dump_state;
 #ifdef CONFIG_DEV_COREDUMP
 	struct {
 		struct mt7996_crash_data *crash_data[__MT7996_RAM_TYPE_MAX];
@@ -573,6 +582,7 @@ void mt7996_init_txpower(struct mt7996_phy *phy);
 int mt7996_txbf_init(struct mt7996_dev *dev);
 int mt7996_get_chip_sku(struct mt7996_dev *dev);
 void mt7996_reset(struct mt7996_dev *dev);
+void mt7996_coredump(struct mt7996_dev *dev, u8 state);
 int mt7996_run(struct ieee80211_hw *hw);
 int mt7996_mcu_init(struct mt7996_dev *dev);
 int mt7996_mcu_init_firmware(struct mt7996_dev *dev);

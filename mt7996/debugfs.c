@@ -84,6 +84,8 @@ mt7996_sys_recovery_set(struct file *file, const char __user *user_buf,
 	 * 7: trigger & enable system error L4 mdp recovery.
 	 * 8: trigger & enable system error full recovery.
 	 * 9: trigger firmware crash.
+	 * 10: trigger grab wa firmware coredump.
+	 * 11: trigger grab wm firmware coredump.
 	 */
 	case UNI_CMD_SER_QUERY:
 		ret = mt7996_mcu_set_ser(dev, UNI_CMD_SER_QUERY, 0, band);
@@ -105,15 +107,25 @@ mt7996_sys_recovery_set(struct file *file, const char __user *user_buf,
 	/* enable full chip reset */
 	case UNI_CMD_SER_SET_RECOVER_FULL:
 		mt76_set(dev, MT_WFDMA0_MCU_HOST_INT_ENA, MT_MCU_CMD_WDT_MASK);
-		dev->recovery.state |= MT_MCU_CMD_WDT_MASK;
+		dev->recovery.state |= MT_MCU_CMD_WM_WDT;
 		mt7996_reset(dev);
 		break;
 
 	/* WARNING: trigger firmware crash */
 	case UNI_CMD_SER_SET_SYSTEM_ASSERT:
+		// trigger wm assert exception
 		ret = mt7996_mcu_trigger_assert(dev);
 		if (ret)
 			return ret;
+		// trigger wa assert exception
+		mt76_wr(dev, 0x89098108, 0x20);
+		mt76_wr(dev, 0x89098118, 0x20);
+		break;
+	case UNI_CMD_SER_FW_COREDUMP_WA:
+		mt7996_coredump(dev, MT7996_COREDUMP_MANUAL_WA);
+		break;
+	case UNI_CMD_SER_FW_COREDUMP_WM:
+		mt7996_coredump(dev, MT7996_COREDUMP_MANUAL_WM);
 		break;
 	default:
 		break;
@@ -160,7 +172,10 @@ mt7996_sys_recovery_get(struct file *file, char __user *user_buf,
 			  "8: trigger system error full recovery\n");
 	desc += scnprintf(buff + desc, bufsz - desc,
 			  "9: trigger firmware crash\n");
-
+	desc += scnprintf(buff + desc, bufsz - desc,
+			  "10: trigger grab wa firmware coredump\n");
+	desc += scnprintf(buff + desc, bufsz - desc,
+			  "11: trigger grab wm firmware coredump\n");
 	/* SER statistics */
 	desc += scnprintf(buff + desc, bufsz - desc,
 			  "\nlet's dump firmware SER statistics...\n");
