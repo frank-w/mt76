@@ -83,6 +83,8 @@
 #define MT7996_CRIT_TEMP		110
 #define MT7996_MAX_TEMP			120
 
+#define MT7996_BUILD_TIME_LEN		24
+
 #define MT7996_RRO_MAX_SESSION		1024
 #define MT7996_RRO_WINDOW_MAX_LEN	1024
 #define MT7996_RRO_ADDR_ELEM_LEN	128
@@ -126,6 +128,7 @@ enum mt7996_ram_type {
 	MT7996_RAM_TYPE_WM,
 	MT7996_RAM_TYPE_WA,
 	MT7996_RAM_TYPE_DSP,
+	__MT7996_RAM_TYPE_MAX,
 };
 
 enum mt7996_txq_id {
@@ -316,9 +319,11 @@ struct mt7996_dev {
 	struct mutex dump_mutex;
 #ifdef CONFIG_DEV_COREDUMP
 	struct {
-		struct mt7996_crash_data *crash_data;
+		struct mt7996_crash_data *crash_data[__MT7996_RAM_TYPE_MAX];
 	} coredump;
 #endif
+	char patch_build_date[MT7996_BUILD_TIME_LEN];
+	char ram_build_date[__MT7996_RAM_TYPE_MAX][MT7996_BUILD_TIME_LEN];
 
 	struct list_head sta_rc_list;
 	struct list_head twt_list;

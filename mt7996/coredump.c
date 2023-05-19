@@ -7,11 +7,11 @@
 #include <linux/utsname.h>
 #include "coredump.h"
 
-static bool coredump_memdump;
+static bool coredump_memdump = true;
 module_param(coredump_memdump, bool, 0644);
 MODULE_PARM_DESC(coredump_memdump, "Optional ability to dump firmware memory");
 
-static const struct mt7996_mem_region mt7996_mem_regions[] = {
+static const struct mt7996_mem_region mt7996_wm_mem_regions[] = {
 	{
 		.start = 0x00800000,
 		.len = 0x0004ffff,
@@ -44,27 +44,55 @@ static const struct mt7996_mem_region mt7996_mem_regions[] = {
 	},
 };
 
+static const struct mt7996_mem_region mt7996_wa_mem_regions[] = {
+	{
+		.start = 0xE0000000,
+		.len = 0x0000ffff,
+		.name = "CRAM",
+	},
+	{
+		.start = 0xE0010000,
+		.len = 0x000117ff,
+		.name = "CRAM2",
+	},
+	{
+		.start = 0x10000000,
+		.len = 0x0001bfff,
+		.name = "ILM",
+	},
+	{
+		.start = 0x10200000,
+		.len = 0x00063fff,
+		.name = "DLM",
+	},
+};
+
 const struct mt7996_mem_region*
-mt7996_coredump_get_mem_layout(struct mt7996_dev *dev, u32 *num)
+mt7996_coredump_get_mem_layout(struct mt7996_dev *dev, u8 type, u32 *num)
 {
 	switch (mt76_chip(&dev->mt76)) {
 	case 0x7990:
 	case 0x7991:
-		*num = ARRAY_SIZE(mt7996_mem_regions);
-		return &mt7996_mem_regions[0];
+		if (type == MT7996_RAM_TYPE_WA) {
+			*num = ARRAY_SIZE(mt7996_wa_mem_regions);
+			return &mt7996_wa_mem_regions[0];
+		}
+
+		*num = ARRAY_SIZE(mt7996_wm_mem_regions);
+		return &mt7996_wm_mem_regions[0];
 	default:
 		return NULL;
 	}
 }
 
-static int mt7996_coredump_get_mem_size(struct mt7996_dev *dev)
+static int mt7996_coredump_get_mem_size(struct mt7996_dev *dev, u8 type)
 {
 	const struct mt7996_mem_region *mem_region;
 	size_t size = 0;
 	u32 num;
 	int i;
 
-	mem_region = mt7996_coredump_get_mem_layout(dev, &num);
+	mem_region = mt7996_coredump_get_mem_layout(dev, type, &num);
 	if (!mem_region)
 		return 0;
 
@@ -81,14 +109,13 @@ static int mt7996_coredump_get_mem_size(struct mt7996_dev *dev)
 	return size;
 }
 
-struct mt7996_crash_data *mt7996_coredump_new(struct mt7996_dev *dev)
+struct mt7996_crash_data *mt7996_coredump_new(struct mt7996_dev *dev, u8 type)
 {
-	struct mt7996_crash_data *crash_data = dev->coredump.crash_data;
+	struct mt7996_crash_data *crash_data = dev->coredump.crash_data[type];
 
 	lockdep_assert_held(&dev->dump_mutex);
 
-	if (coredump_memdump &&
-	    !mt76_poll_msec(dev, MT_FW_DUMP_STATE, 0x3, 0x2, 500))
+	if (!coredump_memdump)
 		return NULL;
 
 	guid_gen(&crash_data->guid);
@@ -98,12 +125,15 @@ struct mt7996_crash_data *mt7996_coredump_new(struct mt7996_dev *dev)
 }
 
 static void
-mt7996_coredump_fw_state(struct mt7996_dev *dev, struct mt7996_coredump *dump,
+mt7996_coredump_fw_state(struct mt7996_dev *dev, u8 type, struct mt7996_coredump *dump,
 			 bool *exception)
 {
-	u32 count;
+	u32 count, reg = MT_FW_WM_DUMP_STATE;
 
-	count = mt76_rr(dev, MT_FW_ASSERT_CNT);
+	if (type == MT7996_RAM_TYPE_WA)
+		reg = MT_FW_WA_DUMP_STATE;
+
+	count = mt76_rr(dev, reg);
 
 	/* normal mode: driver can manually trigger assert for detail info */
 	if (!count)
@@ -115,53 +145,59 @@ mt7996_coredump_fw_state(struct mt7996_dev *dev, struct mt7996_coredump *dump,
 }
 
 static void
-mt7996_coredump_fw_stack(struct mt7996_dev *dev, struct mt7996_coredump *dump,
+mt7996_coredump_fw_stack(struct mt7996_dev *dev, u8 type, struct mt7996_coredump *dump,
 			 bool exception)
 {
-	u32 oldest, i, idx;
+	u32 reg, i, offset = 0, val = MT7996_RAM_TYPE_WM;
 
-	strscpy(dump->pc_current, "program counter", sizeof(dump->pc_current));
+	if (type == MT7996_RAM_TYPE_WA) {
+		offset = MT_MCU_WA_EXCP_BASE - MT_MCU_WM_EXCP_BASE;
+		val = MT7996_RAM_TYPE_WA;
+	}
 
-	/* 0: WM PC log output */
-	mt76_wr(dev, MT_CONN_DBG_CTL_OUT_SEL, 0);
+	/* 0: WM PC log output, 1: WA PC log output  */
+	mt76_wr(dev, MT_CONN_DBG_CTL_OUT_SEL, val);
 	/* choose 33th PC log buffer to read current PC index */
 	mt76_wr(dev, MT_CONN_DBG_CTL_PC_LOG_SEL, 0x3f);
 
 	/* read current PC */
-	dump->pc_stack[0] = mt76_rr(dev, MT_CONN_DBG_CTL_PC_LOG);
+	for (i = 0; i < 10; i++)
+		dump->pc_cur[i] = mt76_rr(dev, MT_CONN_DBG_CTL_PC_LOG);
 
 	/* stop call stack record */
 	if (!exception) {
-		mt76_clear(dev, MT_MCU_WM_EXCP_PC_CTRL, BIT(0));
-		mt76_clear(dev, MT_MCU_WM_EXCP_LR_CTRL, BIT(0));
+		mt76_clear(dev, MT_MCU_WM_EXCP_PC_CTRL + offset, BIT(0));
+		mt76_clear(dev, MT_MCU_WM_EXCP_LR_CTRL + offset, BIT(0));
 	}
 
-	oldest = (u32)mt76_get_field(dev, MT_MCU_WM_EXCP_PC_CTRL,
-				     GENMASK(20, 16)) + 2;
-	for (i = 0; i < 16; i++) {
-		idx = ((oldest + 2 * i + 1) % 32);
-		dump->pc_stack[i + 1] =
-			mt76_rr(dev, MT_MCU_WM_EXCP_PC_LOG + idx * 4);
+	/* read PC log */
+	dump->pc_dbg_ctrl = mt76_rr(dev, MT_MCU_WM_EXCP_PC_CTRL + offset);
+	dump->pc_cur_idx = FIELD_GET(MT_MCU_WM_EXCP_PC_CTRL_IDX_STATUS,
+				     dump->pc_dbg_ctrl);
+	for (i = 0; i < 32; i++) {
+		reg = MT_MCU_WM_EXCP_PC_LOG + i * 4 + offset;
+		dump->pc_stack[i] = mt76_rr(dev, reg);
 	}
 
-	oldest = (u32)mt76_get_field(dev, MT_MCU_WM_EXCP_LR_CTRL,
-				     GENMASK(20, 16)) + 2;
-	for (i = 0; i < 16; i++) {
-		idx = ((oldest + 2 * i + 1) % 32);
-		dump->lr_stack[i] =
-			mt76_rr(dev, MT_MCU_WM_EXCP_LR_LOG + idx * 4);
+	/* read LR log */
+	dump->lr_dbg_ctrl = mt76_rr(dev, MT_MCU_WM_EXCP_LR_CTRL + offset);
+	dump->lr_cur_idx = FIELD_GET(MT_MCU_WM_EXCP_LR_CTRL_IDX_STATUS,
+				     dump->lr_dbg_ctrl);
+	for (i = 0; i < 32; i++) {
+		reg = MT_MCU_WM_EXCP_LR_LOG + i * 4 + offset;
+		dump->lr_stack[i] = mt76_rr(dev, reg);
 	}
 
 	/* start call stack record */
 	if (!exception) {
-		mt76_set(dev, MT_MCU_WM_EXCP_PC_CTRL, BIT(0));
-		mt76_set(dev, MT_MCU_WM_EXCP_LR_CTRL, BIT(0));
+		mt76_set(dev, MT_MCU_WM_EXCP_PC_CTRL + offset, BIT(0));
+		mt76_set(dev, MT_MCU_WM_EXCP_LR_CTRL + offset, BIT(0));
 	}
 }
 
-static struct mt7996_coredump *mt7996_coredump_build(struct mt7996_dev *dev)
+static struct mt7996_coredump *mt7996_coredump_build(struct mt7996_dev *dev, u8 type)
 {
-	struct mt7996_crash_data *crash_data = dev->coredump.crash_data;
+	struct mt7996_crash_data *crash_data = dev->coredump.crash_data[type];
 	struct mt7996_coredump *dump;
 	struct mt7996_coredump_mem *dump_mem;
 	size_t len, sofar = 0, hdr_len = sizeof(*dump);
@@ -186,20 +222,31 @@ static struct mt7996_coredump *mt7996_coredump_build(struct mt7996_dev *dev)
 
 	dump = (struct mt7996_coredump *)(buf);
 	dump->len = len;
+	dump->hdr_len = hdr_len;
 
 	/* plain text */
 	strscpy(dump->magic, "mt76-crash-dump", sizeof(dump->magic));
 	strscpy(dump->kernel, init_utsname()->release, sizeof(dump->kernel));
+	strscpy(dump->fw_type, ((type == MT7996_RAM_TYPE_WA) ? "WA" : "WM"),
+		sizeof(dump->fw_type));
 	strscpy(dump->fw_ver, dev->mt76.hw->wiphy->fw_version,
 		sizeof(dump->fw_ver));
+	strscpy(dump->fw_patch_date, dev->patch_build_date,
+		sizeof(dump->fw_patch_date));
+	strscpy(dump->fw_ram_date[MT7996_RAM_TYPE_WM],
+		dev->ram_build_date[MT7996_RAM_TYPE_WM],
+		MT7996_BUILD_TIME_LEN);
+	strscpy(dump->fw_ram_date[MT7996_RAM_TYPE_WA],
+		dev->ram_build_date[MT7996_RAM_TYPE_WA],
+		MT7996_BUILD_TIME_LEN);
 
 	guid_copy(&dump->guid, &crash_data->guid);
 	dump->tv_sec = crash_data->timestamp.tv_sec;
 	dump->tv_nsec = crash_data->timestamp.tv_nsec;
 	dump->device_id = mt76_chip(&dev->mt76);
 
-	mt7996_coredump_fw_state(dev, dump, &exception);
-	mt7996_coredump_fw_stack(dev, dump, exception);
+	mt7996_coredump_fw_state(dev, type, dump, &exception);
+	mt7996_coredump_fw_stack(dev, type, dump, exception);
 
 	/* gather memory content */
 	dump_mem = (struct mt7996_coredump_mem *)(buf + sofar);
@@ -213,17 +260,19 @@ static struct mt7996_coredump *mt7996_coredump_build(struct mt7996_dev *dev)
 	return dump;
 }
 
-int mt7996_coredump_submit(struct mt7996_dev *dev)
+int mt7996_coredump_submit(struct mt7996_dev *dev, u8 type)
 {
 	struct mt7996_coredump *dump;
 
-	dump = mt7996_coredump_build(dev);
+	dump = mt7996_coredump_build(dev, type);
 	if (!dump) {
 		dev_warn(dev->mt76.dev, "no crash dump data found\n");
 		return -ENODATA;
 	}
 
 	dev_coredumpv(dev->mt76.dev, dump, dump->len, GFP_KERNEL);
+	dev_info(dev->mt76.dev, "%s coredump completed\n",
+		 wiphy_name(dev->mt76.hw->wiphy));
 
 	return 0;
 }
@@ -231,23 +280,26 @@ int mt7996_coredump_submit(struct mt7996_dev *dev)
 int mt7996_coredump_register(struct mt7996_dev *dev)
 {
 	struct mt7996_crash_data *crash_data;
+	int i;
 
-	crash_data = vzalloc(sizeof(*dev->coredump.crash_data));
-	if (!crash_data)
-		return -ENOMEM;
-
-	dev->coredump.crash_data = crash_data;
-
-	if (coredump_memdump) {
-		crash_data->memdump_buf_len = mt7996_coredump_get_mem_size(dev);
-		if (!crash_data->memdump_buf_len)
-			/* no memory content */
-			return 0;
-
-		crash_data->memdump_buf = vzalloc(crash_data->memdump_buf_len);
-		if (!crash_data->memdump_buf) {
-			vfree(crash_data);
+	for (i = 0; i < MT7996_COREDUMP_MAX; i++) {
+		crash_data = vzalloc(sizeof(*dev->coredump.crash_data[i]));
+		if (!crash_data)
 			return -ENOMEM;
+
+		dev->coredump.crash_data[i] = crash_data;
+
+		if (coredump_memdump) {
+			crash_data->memdump_buf_len = mt7996_coredump_get_mem_size(dev, i);
+			if (!crash_data->memdump_buf_len)
+				/* no memory content */
+				return 0;
+
+			crash_data->memdump_buf = vzalloc(crash_data->memdump_buf_len);
+			if (!crash_data->memdump_buf) {
+				vfree(crash_data);
+				return -ENOMEM;
+			}
 		}
 	}
 
@@ -256,13 +308,17 @@ int mt7996_coredump_register(struct mt7996_dev *dev)
 
 void mt7996_coredump_unregister(struct mt7996_dev *dev)
 {
-	if (dev->coredump.crash_data->memdump_buf) {
-		vfree(dev->coredump.crash_data->memdump_buf);
-		dev->coredump.crash_data->memdump_buf = NULL;
-		dev->coredump.crash_data->memdump_buf_len = 0;
-	}
+	int i;
 
-	vfree(dev->coredump.crash_data);
-	dev->coredump.crash_data = NULL;
+	for (i = 0; i < MT7996_COREDUMP_MAX; i++) {
+		if (dev->coredump.crash_data[i]->memdump_buf) {
+			vfree(dev->coredump.crash_data[i]->memdump_buf);
+			dev->coredump.crash_data[i]->memdump_buf = NULL;
+			dev->coredump.crash_data[i]->memdump_buf_len = 0;
+		}
+
+		vfree(dev->coredump.crash_data[i]);
+		dev->coredump.crash_data[i] = NULL;
+	}
 }
 

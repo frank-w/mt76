@@ -2001,28 +2001,25 @@ void mt7996_mac_reset_work(struct work_struct *work)
 }
 
 /* firmware coredump */
-void mt7996_mac_dump_work(struct work_struct *work)
+void mt7996_mac_fw_coredump(struct mt7996_dev *dev, u8 type)
 {
 	const struct mt7996_mem_region *mem_region;
 	struct mt7996_crash_data *crash_data;
-	struct mt7996_dev *dev;
 	struct mt7996_mem_hdr *hdr;
 	size_t buf_len;
 	int i;
 	u32 num;
 	u8 *buf;
 
-	dev = container_of(work, struct mt7996_dev, dump_work);
-
 	mutex_lock(&dev->dump_mutex);
 
-	crash_data = mt7996_coredump_new(dev);
+	crash_data = mt7996_coredump_new(dev, type);
 	if (!crash_data) {
 		mutex_unlock(&dev->dump_mutex);
-		goto skip_coredump;
+		return;
 	}
 
-	mem_region = mt7996_coredump_get_mem_layout(dev, &num);
+	mem_region = mt7996_coredump_get_mem_layout(dev, type, &num);
 	if (!mem_region || !crash_data->memdump_buf_len) {
 		mutex_unlock(&dev->dump_mutex);
 		goto skip_memdump;
@@ -2032,6 +2029,9 @@ void mt7996_mac_dump_work(struct work_struct *work)
 	buf_len = crash_data->memdump_buf_len;
 
 	/* dumping memory content... */
+	dev_info(dev->mt76.dev, "%s start coredump for %s\n",
+		 wiphy_name(dev->mt76.hw->wiphy),
+		 ((type == MT7996_RAM_TYPE_WA) ? "WA" : "WM"));
 	memset(buf, 0, buf_len);
 	for (i = 0; i < num; i++) {
 		if (mem_region->len > buf_len) {
@@ -2048,6 +2048,7 @@ void mt7996_mac_dump_work(struct work_struct *work)
 		mt7996_memcpy_fromio(dev, buf, mem_region->start,
 				     mem_region->len);
 
+		strscpy(hdr->name, mem_region->name, sizeof(mem_region->name));
 		hdr->start = mem_region->start;
 		hdr->len = mem_region->len;
 
@@ -2064,8 +2065,20 @@ void mt7996_mac_dump_work(struct work_struct *work)
 	mutex_unlock(&dev->dump_mutex);
 
 skip_memdump:
-	mt7996_coredump_submit(dev);
-skip_coredump:
+	mt7996_coredump_submit(dev, type);
+}
+
+void mt7996_mac_dump_work(struct work_struct *work)
+{
+	struct mt7996_dev *dev;
+
+	dev = container_of(work, struct mt7996_dev, dump_work);
+	if (READ_ONCE(dev->recovery.state) & MT_MCU_CMD_WA_WDT)
+		mt7996_mac_fw_coredump(dev, MT7996_RAM_TYPE_WA);
+
+	if (READ_ONCE(dev->recovery.state) & MT_MCU_CMD_WM_WDT)
+		mt7996_mac_fw_coredump(dev, MT7996_RAM_TYPE_WM);
+
 	queue_work(dev->mt76.wq, &dev->reset_work);
 }
 
