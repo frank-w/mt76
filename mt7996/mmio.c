@@ -302,6 +302,7 @@ out:
 
 	return ret;
 }
+
 #endif
 
 int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
