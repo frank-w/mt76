@@ -2615,8 +2615,7 @@ int mt7996_mcu_beacon_inband_discov(struct mt7996_dev *dev,
 	if (IS_ERR(rskb))
 		return PTR_ERR(rskb);
 
-	if (changed & BSS_CHANGED_FILS_DISCOVERY &&
-	    vif->bss_conf.fils_discovery.max_interval) {
+	if (changed & BSS_CHANGED_FILS_DISCOVERY) {
 		interval = vif->bss_conf.fils_discovery.max_interval;
 		skb = ieee80211_get_fils_discovery_tmpl(hw, vif);
 	} else if (changed & BSS_CHANGED_UNSOL_BCAST_PROBE_RESP &&
@@ -2651,7 +2650,7 @@ int mt7996_mcu_beacon_inband_discov(struct mt7996_dev *dev,
 	discov->tx_type = !!(changed & BSS_CHANGED_FILS_DISCOVERY);
 	discov->tx_interval = interval;
 	discov->prob_rsp_len = cpu_to_le16(MT_TXD_SIZE + skb->len);
-	discov->enable = true;
+	discov->enable = !!(interval);
 	discov->wcid = cpu_to_le16(MT7996_WTBL_RESERVED);
 
 	buf = (u8 *)tlv + sizeof(*discov);
