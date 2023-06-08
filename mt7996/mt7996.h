@@ -786,6 +786,17 @@ int mt7996_vendor_amnt_sta_remove(struct mt7996_phy *phy,
 				  struct ieee80211_sta *sta);
 #endif
 
+int mt7996_mcu_edcca_enable(struct mt7996_phy *phy, bool enable);
+int mt7996_mcu_edcca_threshold_ctrl(struct mt7996_phy *phy, u8 *value, bool set);
+
+enum edcca_bw_id {
+	EDCCA_BW_20 = 0,
+	EDCCA_BW_40,
+	EDCCA_BW_80,
+	EDCCA_BW_160,
+	EDCCA_MAX_BW_NUM,
+};
+
 #ifdef CONFIG_MTK_DEBUG
 int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir);
 int mt7996_mcu_muru_dbg_info(struct mt7996_dev *dev, u16 item, u8 val);

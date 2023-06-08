@@ -40,6 +40,26 @@ bss_color_ctrl_policy[NUM_MTK_VENDOR_ATTRS_BSS_COLOR_CTRL] = {
 	[MTK_VENDOR_ATTR_AVAL_BSS_COLOR_BMP] = { .type = NLA_U64 },
 };
 
+static const struct nla_policy
+edcca_ctrl_policy[NUM_MTK_VENDOR_ATTRS_EDCCA_CTRL] = {
+	[MTK_VENDOR_ATTR_EDCCA_CTRL_MODE] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_EDCCA_CTRL_PRI20_VAL] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_EDCCA_CTRL_SEC20_VAL] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_EDCCA_CTRL_SEC40_VAL] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_EDCCA_CTRL_SEC80_VAL] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_EDCCA_CTRL_COMPENSATE] = { .type = NLA_S8 },
+	[MTK_VENDOR_ATTR_EDCCA_CTRL_SEC160_VAL] = { .type = NLA_U8 },
+};
+
+static const struct nla_policy
+edcca_dump_policy[NUM_MTK_VENDOR_ATTRS_EDCCA_DUMP] = {
+	[MTK_VENDOR_ATTR_EDCCA_DUMP_MODE] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_EDCCA_DUMP_PRI20_VAL] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_EDCCA_DUMP_SEC40_VAL] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_EDCCA_DUMP_SEC80_VAL] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_EDCCA_DUMP_SEC160_VAL] = { .type = NLA_U8 },
+};
+
 struct mt7996_amnt_data {
 	u8 idx;
 	u8 addr[ETH_ALEN];
@@ -436,6 +456,106 @@ mt7996_vendor_bss_color_ctrl_dump(struct wiphy *wiphy, struct wireless_dev *wdev
 	return len;
 }
 
+static int mt7996_vendor_edcca_ctrl(struct wiphy *wiphy, struct wireless_dev *wdev,
+				    const void *data, int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct mt7996_phy *phy = mt7996_hw_phy(hw);
+	struct nlattr *tb[NUM_MTK_VENDOR_ATTRS_EDCCA_CTRL];
+	int err;
+	u8 edcca_mode;
+	u8 edcca_value[EDCCA_MAX_BW_NUM];
+
+	err = nla_parse(tb, MTK_VENDOR_ATTR_EDCCA_CTRL_MAX, data, data_len,
+			edcca_ctrl_policy, NULL);
+	if (err)
+		return err;
+
+	if (!tb[MTK_VENDOR_ATTR_EDCCA_CTRL_MODE])
+		return -EINVAL;
+
+	edcca_mode = nla_get_u8(tb[MTK_VENDOR_ATTR_EDCCA_CTRL_MODE]);
+	if (edcca_mode == EDCCA_CTRL_SET_EN) {
+		if (!tb[MTK_VENDOR_ATTR_EDCCA_CTRL_PRI20_VAL])
+			return -EINVAL;
+
+		edcca_value[0] =
+			nla_get_u8(tb[MTK_VENDOR_ATTR_EDCCA_CTRL_PRI20_VAL]);
+
+		err = mt7996_mcu_edcca_enable(phy, !!edcca_value[0]);
+		if (err)
+			return err;
+	} else if (edcca_mode == EDCCA_CTRL_SET_THRES) {
+		if (!tb[MTK_VENDOR_ATTR_EDCCA_CTRL_PRI20_VAL] ||
+		    !tb[MTK_VENDOR_ATTR_EDCCA_CTRL_SEC40_VAL] ||
+		    !tb[MTK_VENDOR_ATTR_EDCCA_CTRL_SEC80_VAL] ||
+		    !tb[MTK_VENDOR_ATTR_EDCCA_CTRL_SEC160_VAL]) {
+			return -EINVAL;
+		}
+		edcca_value[EDCCA_BW_20] =
+			nla_get_u8(tb[MTK_VENDOR_ATTR_EDCCA_CTRL_PRI20_VAL]);
+		edcca_value[EDCCA_BW_40] =
+			nla_get_u8(tb[MTK_VENDOR_ATTR_EDCCA_CTRL_SEC40_VAL]);
+		edcca_value[EDCCA_BW_80] =
+			nla_get_u8(tb[MTK_VENDOR_ATTR_EDCCA_CTRL_SEC80_VAL]);
+		edcca_value[EDCCA_BW_160] =
+			nla_get_u8(tb[MTK_VENDOR_ATTR_EDCCA_CTRL_SEC160_VAL]);
+
+		err = mt7996_mcu_edcca_threshold_ctrl(phy, edcca_value, true);
+
+		if (err)
+			return err;
+	} else {
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+
+static int
+mt7996_vendor_edcca_ctrl_dump(struct wiphy *wiphy, struct wireless_dev *wdev,
+			     struct sk_buff *skb, const void *data, int data_len,
+			     unsigned long *storage)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct mt7996_phy *phy = mt7996_hw_phy(hw);
+	struct nlattr *tb[NUM_MTK_VENDOR_ATTRS_EDCCA_CTRL];
+	int err;
+	u8 edcca_mode;
+	u8 value[EDCCA_MAX_BW_NUM];
+
+	if (*storage == 1)
+		return -ENOENT;
+	*storage = 1;
+
+	err = nla_parse(tb, MTK_VENDOR_ATTR_EDCCA_CTRL_MAX, data, data_len,
+			edcca_ctrl_policy, NULL);
+	if (err)
+		return err;
+
+	if (!tb[MTK_VENDOR_ATTR_EDCCA_CTRL_MODE])
+		return -EINVAL;
+
+	edcca_mode = nla_get_u8(tb[MTK_VENDOR_ATTR_EDCCA_CTRL_MODE]);
+
+	if (edcca_mode != EDCCA_CTRL_GET_THRES)
+		return -EINVAL;
+
+	err = mt7996_mcu_edcca_threshold_ctrl(phy, value, false);
+
+	if (err)
+		return err;
+
+	if (nla_put_u8(skb, MTK_VENDOR_ATTR_EDCCA_DUMP_PRI20_VAL, value[EDCCA_BW_20]) ||
+	    nla_put_u8(skb, MTK_VENDOR_ATTR_EDCCA_DUMP_SEC40_VAL, value[EDCCA_BW_40]) ||
+	    nla_put_u8(skb, MTK_VENDOR_ATTR_EDCCA_DUMP_SEC80_VAL, value[EDCCA_BW_80]) ||
+	    nla_put_u8(skb, MTK_VENDOR_ATTR_EDCCA_DUMP_SEC160_VAL, value[EDCCA_BW_160]))
+		return -ENOMEM;
+
+	return EDCCA_MAX_BW_NUM;
+}
+
 static const struct wiphy_vendor_command mt7996_vendor_commands[] = {
 	{
 		.info = {
@@ -471,6 +591,18 @@ static const struct wiphy_vendor_command mt7996_vendor_commands[] = {
 		.dumpit = mt7996_vendor_bss_color_ctrl_dump,
 		.policy = bss_color_ctrl_policy,
 		.maxattr = MTK_VENDOR_ATTR_BSS_COLOR_CTRL_MAX,
+	},
+	{
+		.info = {
+			.vendor_id = MTK_NL80211_VENDOR_ID,
+			.subcmd = MTK_NL80211_VENDOR_SUBCMD_EDCCA_CTRL,
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV |
+			 WIPHY_VENDOR_CMD_NEED_RUNNING,
+		.doit = mt7996_vendor_edcca_ctrl,
+		.dumpit = mt7996_vendor_edcca_ctrl_dump,
+		.policy = edcca_ctrl_policy,
+		.maxattr = MTK_VENDOR_ATTR_EDCCA_CTRL_MAX,
 	},
 };
 

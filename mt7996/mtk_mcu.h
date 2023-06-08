@@ -106,6 +106,21 @@ enum txpower_event {
 	UNI_TXPOWER_PHY_RATE_INFO = 5,
 };
 
+enum {
+	EDCCA_CTRL_SET_EN = 0,
+	EDCCA_CTRL_SET_THRES,
+	EDCCA_CTRL_GET_EN,
+	EDCCA_CTRL_GET_THRES,
+	EDCCA_CTRL_NUM,
+};
+
+enum {
+	EDCCA_DEFAULT = 0,
+	EDCCA_FCC = 1,
+	EDCCA_ETSI = 2,
+	EDCCA_JAPAN = 3
+};
+
 #endif
 
 #endif
