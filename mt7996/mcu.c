@@ -1182,7 +1182,8 @@ int mt7996_mcu_add_rx_ba(struct mt7996_dev *dev,
 }
 
 static void
-mt7996_mcu_sta_he_tlv(struct sk_buff *skb, struct ieee80211_sta *sta)
+mt7996_mcu_sta_he_tlv(struct sk_buff *skb, struct ieee80211_vif *vif,
+		      struct ieee80211_sta *sta)
 {
 	struct ieee80211_he_cap_elem *elem = &sta->deflink.he_cap.he_cap_elem;
 	struct ieee80211_he_mcs_nss_supp mcs_map;
@@ -1201,6 +1202,11 @@ mt7996_mcu_sta_he_tlv(struct sk_buff *skb, struct ieee80211_sta *sta)
 			he->he_mac_cap[i] = elem->mac_cap_info[i];
 		he->he_phy_cap[i] = elem->phy_cap_info[i];
 	}
+
+	if (vif->type == NL80211_IFTYPE_AP &&
+	    (elem->phy_cap_info[1] & IEEE80211_HE_PHY_CAP1_LDPC_CODING_IN_PAYLOAD))
+		u8p_replace_bits(&he->he_phy_cap[1], vif->bss_conf.he_ldpc,
+				 IEEE80211_HE_PHY_CAP1_LDPC_CODING_IN_PAYLOAD);
 
 	mcs_map = sta->deflink.he_cap.he_mcs_nss_supp;
 	switch (sta->deflink.bandwidth) {
@@ -2121,7 +2127,7 @@ int mt7996_mcu_add_rate_ctrl(struct mt7996_dev *dev, struct ieee80211_vif *vif,
 	 * update sta_rec_he here.
 	 */
 	if (changed)
-		mt7996_mcu_sta_he_tlv(skb, sta);
+		mt7996_mcu_sta_he_tlv(skb, vif, sta);
 
 	/* sta_rec_ra accommodates BW, NSS and only MCS range format
 	 * i.e 0-{7,8,9} for VHT.
@@ -2209,7 +2215,7 @@ int mt7996_mcu_add_sta(struct mt7996_dev *dev, struct ieee80211_vif *vif,
 		/* starec amsdu */
 		mt7996_mcu_sta_amsdu_tlv(dev, skb, vif, sta);
 		/* starec he */
-		mt7996_mcu_sta_he_tlv(skb, sta);
+		mt7996_mcu_sta_he_tlv(skb, vif, sta);
 		/* starec he 6g*/
 		mt7996_mcu_sta_he_6g_tlv(skb, sta);
 		/* starec eht */
