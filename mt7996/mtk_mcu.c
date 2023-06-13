@@ -906,4 +906,82 @@ error:
 	return -EINVAL;
 }
 
+/**
+ * This function can be used to build the following commands
+ * MURU_SUTX_CTRL (0x10)
+ * SET_FORCE_MU (0x33)
+ * SET_MUDL_ACK_POLICY (0xC8)
+ * SET_TRIG_TYPE (0xC9)
+ * SET_20M_DYN_ALGO (0xCA)
+ * SET_CERT_MU_EDCA_OVERRIDE (0xCD)
+ */
+int mt7996_mcu_set_muru_cmd(struct mt7996_dev *dev, u16 action, int val)
+{
+	struct {
+		u8 _rsv[4];
+
+		__le16 tag;
+		__le16 len;
+
+		u8 config;
+		u8 rsv[3];
+	} __packed data = {
+		.tag = cpu_to_le16(action),
+		.len = cpu_to_le16(sizeof(data) - 4),
+		.config = (u8) val,
+	};
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(MURU), &data, sizeof(data),
+				 false);
+}
+
+int mt7996_mcu_muru_set_prot_frame_thr(struct mt7996_dev *dev, u32 val)
+{
+	struct {
+		u8 _rsv[4];
+
+		__le16 tag;
+		__le16 len;
+
+		__le32 prot_frame_thr;
+	} __packed data = {
+		.tag = cpu_to_le16(UNI_CMD_MURU_PROT_FRAME_THR),
+		.len = cpu_to_le16(sizeof(data) - 4),
+		.prot_frame_thr = cpu_to_le32(val),
+	};
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(MURU), &data, sizeof(data),
+				 false);
+}
+
+int mt7996_mcu_set_bypass_smthint(struct mt7996_phy *phy, u8 val)
+{
+#define BF_PHY_SMTH_INT_BYPASS 0
+#define BYPASS_VAL 1
+	struct mt7996_dev *dev = phy->dev;
+	struct {
+		u8 _rsv[4];
+
+		u16 tag;
+		u16 len;
+
+		u8 action;
+		u8 band_idx;
+		u8 smthintbypass;
+		u8 __rsv2[5];
+	} __packed data = {
+		.tag = cpu_to_le16(BF_CFG_PHY),
+		.len = cpu_to_le16(sizeof(data) - 4),
+		.action = BF_PHY_SMTH_INT_BYPASS,
+		.band_idx = phy->mt76->band_idx,
+		.smthintbypass = val,
+	};
+
+	if (val != BYPASS_VAL)
+		return -EINVAL;
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(BF), &data, sizeof(data),
+				 true);
+}
+
 #endif

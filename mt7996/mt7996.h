@@ -815,6 +815,9 @@ void mt7996_mcu_rx_bf_event(struct mt7996_dev *dev, struct sk_buff *skb);
 int mt7996_mcu_set_muru_fixed_rate_enable(struct mt7996_dev *dev, u8 action, int val);
 int mt7996_mcu_set_muru_fixed_rate_parameter(struct mt7996_dev *dev, u8 action, void *para);
 int mt7996_mcu_set_txbf_snd_info(struct mt7996_phy *phy, void *para);
+int mt7996_mcu_set_muru_cmd(struct mt7996_dev *dev, u16 action, int val);
+int mt7996_mcu_muru_set_prot_frame_thr(struct mt7996_dev *dev, u32 val);
+int mt7996_mcu_set_bypass_smthint(struct mt7996_phy *phy, u8 val);
 #endif
 
 #ifdef CONFIG_NET_MEDIATEK_SOC_WED

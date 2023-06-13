@@ -3005,6 +3005,16 @@ static const struct file_operations fops_muru_fixed_group_rate = {
 	.llseek = default_llseek,
 };
 
+static int mt7996_muru_prot_thr_set(void *data, u64 val)
+{
+	struct mt7996_phy *phy = data;
+
+	return mt7996_mcu_muru_set_prot_frame_thr(phy->dev, (u32)val);
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_muru_prot_thr, NULL,
+			 mt7996_muru_prot_thr_set, "%lld\n");
+
 int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 {
 	struct mt7996_dev *dev = phy->dev;
@@ -3099,6 +3109,8 @@ int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 	debugfs_create_file("bf_starec_read", 0600, dir, phy, &fops_starec_bf_read);
 	debugfs_create_file("bf_fbk_rpt", 0600, dir, phy, &fops_bf_fbk_rpt);
 	debugfs_create_file("pfmu_tag_read", 0600, dir, phy, &fops_bf_pfmu_tag_read);
+
+	debugfs_create_file("muru_prot_thr", 0200, dir, phy, &fops_muru_prot_thr);
 
 	return 0;
 }

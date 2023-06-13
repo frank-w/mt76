@@ -776,6 +776,7 @@ enum {
 	BF_MOD_EN_CTRL = 20,
 	BF_FBRPT_DBG_INFO_READ = 23,
 	BF_TXSND_INFO = 24,
+	BF_CFG_PHY = 28,
 };
 
 enum {
