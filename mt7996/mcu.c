@@ -369,12 +369,14 @@ mt7996_mcu_rx_radar_detected(struct mt7996_dev *dev, struct sk_buff *skb)
 	if (!mphy)
 		return;
 
-	if (r->band_idx == MT_RX_SEL2)
+	if (r->band_idx == MT_RX_SEL2) {
+		dev->bg_nxt_freq = 0;
 		cfg80211_background_radar_event(mphy->hw->wiphy,
 						&dev->rdd2_chandef,
 						GFP_ATOMIC);
-	else
+	} else {
 		ieee80211_radar_detected(mphy->hw);
+	}
 	dev->hw_pattern++;
 }
 

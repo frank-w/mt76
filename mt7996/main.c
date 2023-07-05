@@ -1431,6 +1431,62 @@ mt7996_twt_teardown_request(struct ieee80211_hw *hw,
 	mutex_unlock(&dev->mt76.mutex);
 }
 
+static void
+mt7996_background_radar_handle_7975_ifem(struct ieee80211_hw *hw,
+					 struct cfg80211_chan_def *user_chandef,
+					 struct cfg80211_chan_def *fw_chandef)
+{
+	struct mt7996_phy *phy = mt7996_hw_phy(hw);
+	struct mt7996_dev *dev = phy->dev;
+	struct cfg80211_chan_def *c = user_chandef;
+	struct ieee80211_channel *first_chan;
+	bool is_ifem_adie, expand = false;
+
+	switch (mt76_chip(&dev->mt76)) {
+	case 0x7990:
+		is_ifem_adie = dev->fem_type == MT7996_FEM_INT &&
+			       dev->chip_sku != MT7996_SKU_233;
+		break;
+	case 0x7992:
+		is_ifem_adie = dev->chip_sku == MT7992_SKU_44 &&
+			       dev->fem_type != MT7996_FEM_EXT;
+		break;
+	default:
+		return;
+	}
+
+	if (!user_chandef || !is_ifem_adie)
+		goto out;
+
+	if (user_chandef->width == NL80211_CHAN_WIDTH_160) {
+		first_chan = ieee80211_get_channel(hw->wiphy, user_chandef->center_freq1 - 70);
+		if (dev->bg_nxt_freq)
+			goto out;
+
+		if (first_chan->flags & IEEE80211_CHAN_RADAR)
+			dev->bg_nxt_freq = first_chan->center_freq;
+		else
+			c = fw_chandef;
+
+		c->chan = ieee80211_get_channel(hw->wiphy, first_chan->center_freq + 80);
+	} else {
+		if (!dev->bg_nxt_freq)
+			goto out;
+
+		c->chan = ieee80211_get_channel(hw->wiphy, dev->bg_nxt_freq);
+		dev->bg_nxt_freq = 0;
+		expand = true;
+	}
+	c->width = NL80211_CHAN_WIDTH_80;
+	c->center_freq1 = c->chan->center_freq + 30;
+
+	if (c == user_chandef)
+		cfg80211_background_radar_update_channel(hw->wiphy, c, expand);
+	return;
+out:
+	dev->bg_nxt_freq = 0;
+}
+
 static int
 mt7996_set_radar_background(struct ieee80211_hw *hw,
 			    struct cfg80211_chan_def *chandef)
@@ -1439,6 +1495,7 @@ mt7996_set_radar_background(struct ieee80211_hw *hw,
 	struct mt7996_dev *dev = phy->dev;
 	int ret = -EINVAL;
 	bool running;
+	struct cfg80211_chan_def ifem_chandef = {};
 
 	mutex_lock(&dev->mt76.mutex);
 
@@ -1451,13 +1508,14 @@ mt7996_set_radar_background(struct ieee80211_hw *hw,
 		goto out;
 	}
 
+	mt7996_background_radar_handle_7975_ifem(hw, chandef, &ifem_chandef);
+
 	/* rdd2 already configured on a radar channel */
 	running = dev->rdd2_phy &&
 		  cfg80211_chandef_valid(&dev->rdd2_chandef) &&
 		  !!(dev->rdd2_chandef.chan->flags & IEEE80211_CHAN_RADAR);
 
-	if (!chandef || running ||
-	    !(chandef->chan->flags & IEEE80211_CHAN_RADAR)) {
+	if (!chandef || running) {
 		ret = mt7996_mcu_rdd_background_enable(phy, NULL);
 		if (ret)
 			goto out;
@@ -1466,7 +1524,9 @@ mt7996_set_radar_background(struct ieee80211_hw *hw,
 			goto update_phy;
 	}
 
-	ret = mt7996_mcu_rdd_background_enable(phy, chandef);
+	ret = mt7996_mcu_rdd_background_enable(phy,
+					       ifem_chandef.chan ?
+					       &ifem_chandef : chandef);
 	if (ret)
 		goto out;
 

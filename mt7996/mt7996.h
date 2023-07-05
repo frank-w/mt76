@@ -441,6 +441,7 @@ struct mt7996_dev {
 	bool testmode_enable;
 	bool bin_file_mode;
 	u8 eeprom_mode;
+	u32 bg_nxt_freq;
 
 	bool ibf;
 	u8 fw_debug_wm;
