@@ -6,6 +6,9 @@
 #include "mt7996.h"
 #include "mcu.h"
 #include "mac.h"
+#ifdef CONFIG_MTK_DEBUG
+#include "mtk_mcu.h"
+#endif
 
 static bool mt7996_dev_running(struct mt7996_dev *dev)
 {
@@ -78,6 +81,9 @@ int mt7996_run(struct ieee80211_hw *hw)
 		goto out;
 
 #ifdef CONFIG_MTK_DEBUG
+	phy->sr_enable = true;
+	phy->enhanced_sr_enable = true;
+
 	ret = mt7996_mcu_set_tx_power_ctrl(phy, UNI_TXPOWER_SKU_POWER_LIMIT_CTRL,
 					   !dev->dbg.sku_disable);
 #else

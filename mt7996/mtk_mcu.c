@@ -146,4 +146,115 @@ int mt7996_mcu_edcca_threshold_ctrl(struct mt7996_phy *phy, u8 *value, bool set)
 	return 0;
 }
 
+int mt7996_mcu_set_sr_enable(struct mt7996_phy *phy, u8 action, u64 val, bool set)
+{
+	struct {
+		u8 band_idx;
+		u8 _rsv[3];
+
+		__le16 tag;
+		__le16 len;
+
+		__le32 val;
+
+	} __packed req = {
+		.band_idx = phy->mt76->band_idx,
+
+		.tag = cpu_to_le16(action),
+		.len = cpu_to_le16(sizeof(req) - 4),
+
+		.val = cpu_to_le32((u32) val),
+	};
+
+	if (set)
+		return mt76_mcu_send_msg(&phy->dev->mt76, MCU_WM_UNI_CMD(SR), &req,
+					 sizeof(req), false);
+	else
+		return mt76_mcu_send_msg(&phy->dev->mt76, MCU_WM_UNI_CMD_QUERY(SR), &req,
+					 sizeof(req), false);
+}
+
+void mt7996_mcu_rx_sr_swsd(struct mt7996_dev *dev, struct sk_buff *skb)
+{
+#define SR_SCENE_DETECTION_TIMER_PERIOD_MS 500
+	struct mt7996_mcu_sr_swsd_event *event;
+	static const char * const rules[] = {"1 - NO CONNECTED", "2 - NO CONGESTION",
+					     "3 - NO INTERFERENCE", "4 - SR ON"};
+	u8 idx;
+
+	event = (struct mt7996_mcu_sr_swsd_event *)skb->data;
+	idx = event->basic.band_idx;
+
+	dev_info(dev->mt76.dev, "Band index = %u\n", le16_to_cpu(event->basic.band_idx));
+	dev_info(dev->mt76.dev, "Hit Rule = %s\n", rules[event->tlv[idx].rule]);
+	dev_info(dev->mt76.dev, "Timer Period = %d(us)\n"
+		 "Congestion Ratio  = %d.%1d%%\n",
+		 SR_SCENE_DETECTION_TIMER_PERIOD_MS * 1000,
+		 le32_to_cpu(event->tlv[idx].total_airtime_ratio) / 10,
+		 le32_to_cpu(event->tlv[idx].total_airtime_ratio) % 10);
+	dev_info(dev->mt76.dev,
+		 "Total Airtime = %d(us)\n"
+		 "ChBusy = %d\n"
+		 "SrTx = %d\n"
+		 "OBSS = %d\n"
+		 "MyTx = %d\n"
+		 "MyRx = %d\n"
+		 "Interference Ratio = %d.%1d%%\n",
+		 le32_to_cpu(event->tlv[idx].total_airtime),
+		 le32_to_cpu(event->tlv[idx].channel_busy_time),
+		 le32_to_cpu(event->tlv[idx].sr_tx_airtime),
+		 le32_to_cpu(event->tlv[idx].obss_airtime),
+		 le32_to_cpu(event->tlv[idx].my_tx_airtime),
+		 le32_to_cpu(event->tlv[idx].my_rx_airtime),
+		 le32_to_cpu(event->tlv[idx].obss_airtime_ratio) / 10,
+		 le32_to_cpu(event->tlv[idx].obss_airtime_ratio) % 10);
+}
+
+void mt7996_mcu_rx_sr_hw_indicator(struct mt7996_dev *dev, struct sk_buff *skb)
+{
+	struct mt7996_mcu_sr_hw_ind_event *event;
+
+	event = (struct mt7996_mcu_sr_hw_ind_event *)skb->data;
+
+	dev_info(dev->mt76.dev, "Inter PPDU Count = %u\n",
+		 le16_to_cpu(event->inter_bss_ppdu_cnt));
+	dev_info(dev->mt76.dev, "SR Valid Count = %u\n",
+		 le16_to_cpu(event->non_srg_valid_cnt));
+	dev_info(dev->mt76.dev, "SR Tx Count = %u\n",
+		 le32_to_cpu(event->sr_ampdu_mpdu_cnt));
+	dev_info(dev->mt76.dev, "SR Tx Acked Count = %u\n",
+		 le32_to_cpu(event->sr_ampdu_mpdu_acked_cnt));
+}
+
+void mt7996_mcu_rx_sr_event(struct mt7996_dev *dev, struct sk_buff *skb)
+{
+	struct mt76_phy *mphy = &dev->mt76.phy;
+	struct mt7996_phy *phy;
+	struct mt7996_mcu_sr_common_event *event;
+
+	event = (struct mt7996_mcu_sr_common_event *)skb->data;
+	mphy = dev->mt76.phys[event->basic.band_idx];
+	if (!mphy)
+		return;
+
+	phy = (struct mt7996_phy *)mphy->priv;
+
+	switch (le16_to_cpu(event->basic.tag)) {
+	case UNI_EVENT_SR_CFG_SR_ENABLE:
+		phy->sr_enable = le32_to_cpu(event->value) ? true : false;
+		break;
+	case UNI_EVENT_SR_HW_ESR_ENABLE:
+		phy->enhanced_sr_enable = le32_to_cpu(event->value) ? true : false;
+		break;
+	case UNI_EVENT_SR_SW_SD:
+		mt7996_mcu_rx_sr_swsd(dev, skb);
+		break;
+	case UNI_EVENT_SR_HW_IND:
+		mt7996_mcu_rx_sr_hw_indicator(dev, skb);
+		break;
+	default:
+		dev_info(dev->mt76.dev, "Unknown SR event tag %d\n",
+			 le16_to_cpu(event->basic.tag));
+	}
+}
 #endif

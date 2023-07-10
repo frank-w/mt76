@@ -352,6 +352,10 @@ struct mt7996_phy {
 	spinlock_t amnt_lock;
 	struct mt7996_air_monitor_ctrl amnt_ctrl;
 #endif
+#ifdef CONFIG_MTK_DEBUG
+	bool sr_enable:1;
+	bool enhanced_sr_enable:1;
+#endif
 };
 
 struct mt7996_dev {
@@ -800,6 +804,8 @@ enum edcca_bw_id {
 #ifdef CONFIG_MTK_DEBUG
 int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir);
 int mt7996_mcu_muru_dbg_info(struct mt7996_dev *dev, u16 item, u8 val);
+int mt7996_mcu_set_sr_enable(struct mt7996_phy *phy, u8 action, u64 val, bool set);
+void mt7996_mcu_rx_sr_event(struct mt7996_dev *dev, struct sk_buff *skb);
 #endif
 
 #ifdef CONFIG_NET_MEDIATEK_SOC_WED

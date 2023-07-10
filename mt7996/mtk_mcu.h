@@ -121,6 +121,62 @@ enum {
 	EDCCA_JAPAN = 3
 };
 
+enum {
+	UNI_EVENT_SR_CFG_SR_ENABLE = 0x1,
+	UNI_EVENT_SR_SW_SD = 0x83,
+	UNI_EVENT_SR_HW_IND = 0xC9,
+	UNI_EVENT_SR_HW_ESR_ENABLE = 0xD8,
+};
+enum {
+	UNI_CMD_SR_CFG_SR_ENABLE = 0x1,
+	UNI_CMD_SR_SW_SD = 0x84,
+	UNI_CMD_SR_HW_IND = 0xCB,
+	UNI_CMD_SR_HW_ENHANCE_SR_ENABLE = 0xDA,
+};
+
+struct mt7996_mcu_sr_basic_event {
+	struct mt7996_mcu_rxd rxd;
+
+	u8 band_idx;
+	u8 _rsv[3];
+
+	__le16 tag;
+	__le16 len;
+};
+
+struct sr_sd_tlv {
+	u8 _rsv[16];
+	__le32 sr_tx_airtime;
+	__le32 obss_airtime;
+	__le32 my_tx_airtime;
+	__le32 my_rx_airtime;
+	__le32 channel_busy_time;
+	__le32 total_airtime;
+	__le32 total_airtime_ratio;
+	__le32 obss_airtime_ratio;
+	u8 rule;
+	u8 _rsv2[59];
+} __packed;
+
+struct mt7996_mcu_sr_swsd_event {
+	struct mt7996_mcu_sr_basic_event basic;
+	struct sr_sd_tlv tlv[3];
+} __packed;
+
+struct mt7996_mcu_sr_common_event {
+	struct mt7996_mcu_sr_basic_event basic;
+	__le32 value;
+};
+
+struct mt7996_mcu_sr_hw_ind_event {
+	struct mt7996_mcu_sr_basic_event basic;
+	__le16 non_srg_valid_cnt;
+	u8 _rsv[4];
+	__le16 inter_bss_ppdu_cnt;
+	u8 _rsv2[4];
+	__le32 sr_ampdu_mpdu_cnt;
+	__le32 sr_ampdu_mpdu_acked_cnt;
+};
 #endif
 
 #endif

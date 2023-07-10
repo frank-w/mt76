@@ -2777,6 +2777,83 @@ static int mt7996_show_eeprom_mode(struct seq_file *s, void *data)
 	return 0;
 }
 
+static int
+mt7996_sr_enable_get(void *data, u64 *val)
+{
+	struct mt7996_phy *phy = data;
+
+	*val = phy->sr_enable;
+
+	return 0;
+}
+
+static int
+mt7996_sr_enable_set(void *data, u64 val)
+{
+	struct mt7996_phy *phy = data;
+	int ret;
+
+	if (!!val == phy->sr_enable)
+		return 0;
+
+	ret = mt7996_mcu_set_sr_enable(phy, UNI_CMD_SR_CFG_SR_ENABLE, val, true);
+	if (ret)
+		return ret;
+
+	return mt7996_mcu_set_sr_enable(phy, UNI_CMD_SR_CFG_SR_ENABLE, 0, false);
+}
+DEFINE_DEBUGFS_ATTRIBUTE(fops_sr_enable, mt7996_sr_enable_get,
+			 mt7996_sr_enable_set, "%lld\n");
+static int
+mt7996_sr_enhanced_enable_get(void *data, u64 *val)
+{
+	struct mt7996_phy *phy = data;
+
+	*val = phy->enhanced_sr_enable;
+
+	return 0;
+}
+
+static int
+mt7996_sr_enhanced_enable_set(void *data, u64 val)
+{
+	struct mt7996_phy *phy = data;
+	int ret;
+
+	if (!!val == phy->enhanced_sr_enable)
+		return 0;
+
+	ret = mt7996_mcu_set_sr_enable(phy, UNI_CMD_SR_HW_ENHANCE_SR_ENABLE, val, true);
+	if (ret)
+		return ret;
+
+	return mt7996_mcu_set_sr_enable(phy, UNI_CMD_SR_HW_ENHANCE_SR_ENABLE, 0, false);
+}
+DEFINE_DEBUGFS_ATTRIBUTE(fops_sr_enhanced_enable, mt7996_sr_enhanced_enable_get,
+			 mt7996_sr_enhanced_enable_set, "%lld\n");
+
+static int
+mt7996_sr_stats_show(struct seq_file *file, void *data)
+{
+	struct mt7996_phy *phy = file->private;
+
+	mt7996_mcu_set_sr_enable(phy, UNI_CMD_SR_HW_IND, 0, false);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(mt7996_sr_stats);
+
+static int
+mt7996_sr_scene_cond_show(struct seq_file *file, void *data)
+{
+	struct mt7996_phy *phy = file->private;
+
+	mt7996_mcu_set_sr_enable(phy, UNI_CMD_SR_SW_SD, 0, false);
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(mt7996_sr_scene_cond);
+
 int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 {
 	struct mt7996_dev *dev = phy->dev;
@@ -2855,6 +2932,11 @@ int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 
 	debugfs_create_u8("sku_disable", 0600, dir, &dev->dbg.sku_disable);
 	debugfs_create_file("scs_enable", 0200, dir, phy, &fops_scs_enable);
+
+	debugfs_create_file("sr_enable", 0600, dir, phy, &fops_sr_enable);
+	debugfs_create_file("sr_enhanced_enable", 0600, dir, phy, &fops_sr_enhanced_enable);
+	debugfs_create_file("sr_stats", 0400, dir, phy, &mt7996_sr_stats_fops);
+	debugfs_create_file("sr_scene_cond", 0400, dir, phy, &mt7996_sr_scene_cond_fops);
 
 	return 0;
 }

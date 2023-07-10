@@ -712,6 +712,14 @@ mt7996_mcu_uni_rx_unsolicited_event(struct mt7996_dev *dev, struct sk_buff *skb)
 	case MCU_UNI_EVENT_WED_RRO:
 		mt7996_mcu_wed_rro_event(dev, skb);
 		break;
+#ifdef CONFIG_MTK_DEBUG
+	case MCU_UNI_EVENT_SR:
+		mt7996_mcu_rx_sr_event(dev, skb);
+		break;
+#endif
+	case MCU_UNI_EVENT_THERMAL:
+		mt7996_mcu_rx_thermal_notify(dev, skb);
+		break;
 #ifdef CONFIG_NL80211_TESTMODE
 	case MCU_UNI_EVENT_TESTMODE_CTRL:
 		mt7996_tm_rf_test_event(dev, skb);
