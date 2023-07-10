@@ -4506,6 +4506,7 @@ int mt7996_mcu_wed_rro_reset_sessions(struct mt7996_dev *dev, u16 id)
 int mt7996_mcu_set_txpower_sku(struct mt7996_phy *phy)
 {
 #define TX_POWER_LIMIT_TABLE_RATE	0
+#define TX_POWER_LIMIT_TABLE_PATH	1
 	struct mt7996_dev *dev = phy->dev;
 	struct mt76_phy *mphy = phy->mt76;
 	struct ieee80211_hw *hw = mphy->hw;
@@ -4519,22 +4520,23 @@ int mt7996_mcu_set_txpower_sku(struct mt7996_phy *phy)
 		u8 band_idx;
 	} __packed req = {
 		.tag = cpu_to_le16(UNI_TXPOWER_POWER_LIMIT_TABLE_CTRL),
-		.len = cpu_to_le16(sizeof(req) + MT7996_SKU_RATE_NUM - 4),
+		.len = cpu_to_le16(sizeof(req) + MT7996_SKU_PATH_NUM - 4),
 		.power_ctrl_id = UNI_TXPOWER_POWER_LIMIT_TABLE_CTRL,
 		.power_limit_type = TX_POWER_LIMIT_TABLE_RATE,
 		.band_idx = phy->mt76->band_idx,
 	};
 	struct mt76_power_limits la = {};
+	struct mt76_power_path_limits la_path = {};
 	struct sk_buff *skb;
-	int i, tx_power;
+	int i, ret, tx_power;
 
 	tx_power = mt7996_get_power_bound(phy, hw->conf.power_level);
 	tx_power = mt76_get_rate_power_limits(mphy, mphy->chandef.chan,
-					      &la, tx_power);
+					      &la, &la_path, tx_power);
 	mphy->txpower_cur = tx_power;
 
 	skb = mt76_mcu_msg_alloc(&dev->mt76, NULL,
-				 sizeof(req) + MT7996_SKU_RATE_NUM);
+				 sizeof(req) + MT7996_SKU_PATH_NUM);
 	if (!skb)
 		return -ENOMEM;
 
@@ -4556,6 +4558,37 @@ int mt7996_mcu_set_txpower_sku(struct mt7996_phy *phy)
 	skb_put_data(skb, &la.ru[0], sizeof(la.ru));
 	/* eht */
 	skb_put_data(skb, &la.eht[0], sizeof(la.eht));
+
+	/* padding */
+	skb_put_zero(skb, MT7996_SKU_PATH_NUM - MT7996_SKU_RATE_NUM);
+
+	ret = mt76_mcu_skb_send_msg(&dev->mt76, skb,
+				    MCU_WM_UNI_CMD(TXPOWER), true);
+	if (ret)
+		return ret;
+
+	/* only set per-path power table when it's configured */
+	if (!la_path.ofdm[0])
+		return 0;
+
+	skb = mt76_mcu_msg_alloc(&dev->mt76, NULL,
+				 sizeof(req) + MT7996_SKU_PATH_NUM);
+	if (!skb)
+		return -ENOMEM;
+	req.power_limit_type = TX_POWER_LIMIT_TABLE_PATH;
+
+	skb_put_data(skb, &req, sizeof(req));
+	skb_put_data(skb, &la_path.cck, sizeof(la_path.cck));
+	skb_put_data(skb, &la_path.ofdm, sizeof(la_path.ofdm));
+	skb_put_data(skb, &la_path.ofdm_bf, sizeof(la_path.ofdm_bf));
+
+	for (i = 0; i < 32; i++) {
+		bool bf = i % 2;
+		u8 idx = i / 2;
+		s8 *buf = bf ? la_path.ru_bf[idx] : la_path.ru[idx];
+
+		skb_put_data(skb, buf, sizeof(la_path.ru[0]));
+	}
 
 	return mt76_mcu_skb_send_msg(&dev->mt76, skb,
 				     MCU_WM_UNI_CMD(TXPOWER), true);

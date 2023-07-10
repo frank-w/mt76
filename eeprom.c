@@ -341,6 +341,7 @@ mt76_apply_multi_array_limit(s8 *pwr, size_t pwr_len, s8 pwr_num,
 s8 mt76_get_rate_power_limits(struct mt76_phy *phy,
 			      struct ieee80211_channel *chan,
 			      struct mt76_power_limits *dest,
+			      struct mt76_power_path_limits *dest_path,
 			      s8 target_power)
 {
 	struct mt76_dev *dev = phy->dev;
@@ -348,16 +349,20 @@ s8 mt76_get_rate_power_limits(struct mt76_phy *phy,
 	const __be32 *val;
 	char name[16];
 	u32 mcs_rates = dev->drv->mcs_rates;
-	u32 ru_rates = ARRAY_SIZE(dest->ru[0]);
 	char band;
 	size_t len;
-	s8 max_power = 0;
+	s8 max_power = -127;
+	s8 max_power_backoff = -127;
 	s8 txs_delta;
+	int n_chains = hweight16(phy->chainmask);
+	s8 target_power_combine = target_power + mt76_tx_power_nss_delta(n_chains);
 
 	if (!mcs_rates)
-		mcs_rates = 10;
+		mcs_rates = 12;
 
 	memset(dest, target_power, sizeof(*dest));
+	if (dest_path != NULL)
+		memset(dest_path, 0, sizeof(*dest_path));
 
 	if (!IS_ENABLED(CONFIG_OF))
 		return target_power;
@@ -405,12 +410,47 @@ s8 mt76_get_rate_power_limits(struct mt76_phy *phy,
 				     ARRAY_SIZE(dest->mcs), val, len,
 				     target_power, txs_delta, &max_power);
 
-	val = mt76_get_of_array(np, "rates-ru", &len, ru_rates + 1);
+	val = mt76_get_of_array(np, "rates-ru", &len, ARRAY_SIZE(dest->ru[0]) + 1);
 	mt76_apply_multi_array_limit(dest->ru[0], ARRAY_SIZE(dest->ru[0]),
 				     ARRAY_SIZE(dest->ru), val, len,
 				     target_power, txs_delta, &max_power);
 
-	return max_power;
+	val = mt76_get_of_array(np, "rates-eht", &len, ARRAY_SIZE(dest->eht[0]) + 1);
+	mt76_apply_multi_array_limit(dest->eht[0], ARRAY_SIZE(dest->eht[0]),
+				     ARRAY_SIZE(dest->eht), val, len,
+				     target_power, txs_delta, &max_power);
+
+	if (dest_path == NULL)
+		return max_power;
+
+	max_power_backoff = max_power;
+
+	val = mt76_get_of_array(np, "paths-cck", &len, ARRAY_SIZE(dest_path->cck));
+	mt76_apply_array_limit(dest_path->cck, ARRAY_SIZE(dest_path->cck), val,
+			       target_power_combine, txs_delta, &max_power_backoff);
+
+	val = mt76_get_of_array(np, "paths-ofdm", &len, ARRAY_SIZE(dest_path->ofdm));
+	mt76_apply_array_limit(dest_path->ofdm, ARRAY_SIZE(dest_path->ofdm), val,
+			       target_power_combine, txs_delta, &max_power_backoff);
+
+	val = mt76_get_of_array(np, "paths-ofdm-bf", &len, ARRAY_SIZE(dest_path->ofdm_bf));
+	mt76_apply_array_limit(dest_path->ofdm_bf, ARRAY_SIZE(dest_path->ofdm_bf), val,
+			       target_power_combine, txs_delta, &max_power_backoff);
+
+	val = mt76_get_of_array(np, "paths-ru", &len, ARRAY_SIZE(dest_path->ru[0]) + 1);
+	mt76_apply_multi_array_limit(dest_path->ru[0], ARRAY_SIZE(dest_path->ru[0]),
+				     ARRAY_SIZE(dest_path->ru), val, len,
+				     target_power_combine, txs_delta, &max_power_backoff);
+
+	val = mt76_get_of_array(np, "paths-ru-bf", &len, ARRAY_SIZE(dest_path->ru_bf[0]) + 1);
+	mt76_apply_multi_array_limit(dest_path->ru_bf[0], ARRAY_SIZE(dest_path->ru_bf[0]),
+				     ARRAY_SIZE(dest_path->ru_bf), val, len,
+				     target_power_combine, txs_delta, &max_power_backoff);
+
+	if (max_power_backoff == target_power_combine)
+		return max_power;
+
+	return max_power_backoff;
 }
 EXPORT_SYMBOL_GPL(mt76_get_rate_power_limits);
 

@@ -2150,7 +2150,7 @@ mt76_connac_mcu_rate_txpower_band(struct mt76_phy *phy,
 			sar_power = mt76_get_sar_power(phy, &chan, reg_power);
 
 			mt76_get_rate_power_limits(phy, &chan, limits,
-						   sar_power);
+						   NULL, sar_power);
 
 			tx_power_tlv.last_msg = ch_list[idx] == last_ch;
 			sku_tlbv.channel = ch_list[idx];

@@ -1053,6 +1053,14 @@ struct mt76_power_limits {
 	s8 eht[16][16];
 };
 
+struct mt76_power_path_limits {
+	s8 cck[5];
+	s8 ofdm[5];
+	s8 ofdm_bf[4];
+	s8 ru[16][15];
+	s8 ru_bf[16][15];
+};
+
 struct mt76_ethtool_worker_info {
 	u64 *data;
 	int idx;
@@ -1655,6 +1663,7 @@ mt76_find_channel_node(struct device_node *np, struct ieee80211_channel *chan);
 s8 mt76_get_rate_power_limits(struct mt76_phy *phy,
 			      struct ieee80211_channel *chan,
 			      struct mt76_power_limits *dest,
+			      struct mt76_power_path_limits *dest_path,
 			      s8 target_power);
 
 static inline bool mt76_queue_is_wed_tx_free(struct mt76_queue *q)
