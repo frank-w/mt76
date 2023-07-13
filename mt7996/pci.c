@@ -11,6 +11,9 @@
 #include "mac.h"
 #include "../trace.h"
 
+static bool hif2_enable = false;
+module_param(hif2_enable, bool, 0644);
+
 static LIST_HEAD(hif_list);
 static DEFINE_SPINLOCK(hif_lock);
 static u32 hif_idx;
@@ -63,6 +66,9 @@ static struct mt7996_hif *mt7996_pci_init_hif2(struct pci_dev *pdev)
 {
 	hif_idx++;
 
+	if (!hif2_enable)
+		return NULL;
+
 	if (!pci_get_device(PCI_VENDOR_ID_MEDIATEK, 0x7991, NULL) &&
 	    !pci_get_device(PCI_VENDOR_ID_MEDIATEK, 0x799a, NULL))
 		return NULL;
@@ -76,6 +82,9 @@ static struct mt7996_hif *mt7996_pci_init_hif2(struct pci_dev *pdev)
 static int mt7996_pci_hif2_probe(struct pci_dev *pdev)
 {
 	struct mt7996_hif *hif;
+
+	if (!hif2_enable)
+		return 0;
 
 	hif = devm_kzalloc(&pdev->dev, sizeof(*hif), GFP_KERNEL);
 	if (!hif)
@@ -100,6 +109,8 @@ static int mt7996_pci_probe(struct pci_dev *pdev,
 	struct mt7996_dev *dev;
 	int irq, hif2_irq, ret;
 	struct mt76_dev *mdev;
+
+	hif2_enable |= (id->device == 0x7990 || id->device == 0x7991);
 
 	ret = pcim_enable_device(pdev);
 	if (ret)
