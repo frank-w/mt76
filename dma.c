@@ -448,9 +448,32 @@ mt76_dma_get_buf(struct mt76_dev *dev, struct mt76_queue *q, int idx,
 	mt76_dma_should_drop_buf(drop, ctrl, buf1, desc_info);
 
 	if (mt76_queue_is_wed_rx(q)) {
+		u32 id, find = 0;
 		u32 token = FIELD_GET(MT_DMA_CTL_TOKEN, buf1);
-		struct mt76_rxwi_cache *r = mt76_rx_token_release(dev, token);
+		struct mt76_rxwi_cache *r;
 
+		if (*more) {
+			spin_lock_bh(&dev->rx_token_lock);
+
+			idr_for_each_entry(&dev->rx_token, r, id) {
+				if (r->dma_addr == le32_to_cpu(desc->buf0)) {
+					find = 1;
+					token = id;
+
+					/* Write correct id back to DMA*/
+					u32p_replace_bits(&buf1, id,
+							  MT_DMA_CTL_TOKEN);
+					WRITE_ONCE(desc->buf1, cpu_to_le32(buf1));
+					break;
+				}
+			}
+
+			spin_unlock_bh(&dev->rx_token_lock);
+			if (!find)
+				return NULL;
+		}
+
+		r = mt76_rx_token_release(dev, token);
 		if (!r)
 			return NULL;
 
@@ -978,7 +1001,7 @@ mt76_dma_rx_process(struct mt76_dev *dev, struct mt76_queue *q, int budget)
 		if (!data)
 			break;
 
-		if (drop)
+		if (drop || (len == 0))
 			goto free_frag;
 
 		if (q->rx_head)
