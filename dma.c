@@ -490,7 +490,7 @@ mt76_dma_get_buf(struct mt76_dev *dev, struct mt76_queue *q, int idx,
 		} else {
 			struct mt76_queue_buf qbuf;
 
-			buf = page_frag_alloc(&q->rx_page, q->buf_size, GFP_ATOMIC);
+			buf = page_frag_alloc(&q->rx_page, q->buf_size, GFP_ATOMIC | GFP_DMA32);
 			if (!buf)
 				return NULL;
 
@@ -712,7 +712,7 @@ mt76_dma_rx_fill(struct mt76_dev *dev, struct mt76_queue *q)
 		if (mt76_queue_is_wed_rro_ind(q))
 			goto done;
 
-		buf = page_frag_alloc(&q->rx_page, q->buf_size, GFP_ATOMIC);
+		buf = page_frag_alloc(&q->rx_page, q->buf_size, GFP_ATOMIC | GFP_DMA32);
 		if (!buf)
 			break;
 

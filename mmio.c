@@ -144,14 +144,14 @@ u32 mt76_mmio_wed_init_rx_buf(struct mtk_wed_device *wed, int size)
 	for (i = 0; i < size; i++) {
 		struct mt76_rxwi_cache *r = mt76_get_rxwi(dev);
 		dma_addr_t addr;
-		struct page *page;
 		int token;
 		void *ptr;
 
 		if (!r)
 			goto unmap;
 
-		ptr = page_frag_alloc(&wed->rx_buf_ring.rx_page, length, GFP_ATOMIC);
+		ptr = page_frag_alloc(&wed->rx_buf_ring.rx_page, length,
+				      GFP_ATOMIC | GFP_DMA32);
 		if (!ptr) {
 			mt76_put_rxwi(dev, r);
  			goto unmap;
