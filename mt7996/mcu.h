@@ -755,6 +755,8 @@ enum {
 	RATE_PARAM_FIXED_GI = 11,
 	RATE_PARAM_AUTO = 20,
 #ifdef CONFIG_MTK_VENDOR
+	RATE_PARAM_FIXED_MIMO = 30,
+	RATE_PARAM_FIXED_OFDMA = 31,
 	RATE_PARAM_AUTO_MU = 32,
 #endif
 };
@@ -767,6 +769,7 @@ enum {
 #define OFDMA_UL                       BIT(1)
 #define MUMIMO_DL                      BIT(2)
 #define MUMIMO_UL                      BIT(3)
+#define MUMIMO_DL_CERT                 BIT(4)
 
 enum {
 	BF_SOUNDING_ON = 1,
@@ -853,11 +856,14 @@ enum {
 	UNI_BAND_CONFIG_EDCCA_ENABLE = 0x05,
 	UNI_BAND_CONFIG_EDCCA_THRESHOLD = 0x06,
 	UNI_BAND_CONFIG_RTS_THRESHOLD = 0x08,
+	UNI_BAND_CONFIG_RTS_SIGTA_EN = 0x09,
+	UNI_BAND_CONFIG_DIS_SECCH_CCA_DET = 0x0a,
 };
 
 enum {
 	UNI_WSYS_CONFIG_FW_LOG_CTRL,
 	UNI_WSYS_CONFIG_FW_DBG_CTRL,
+	UNI_CMD_CERT_CFG = 6,
 };
 
 enum {

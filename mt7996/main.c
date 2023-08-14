@@ -588,6 +588,7 @@ mt7996_get_rates_table(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 		       bool beacon, bool mcast)
 {
 	struct mt76_vif *mvif = (struct mt76_vif *)vif->drv_priv;
+	struct mt7996_dev *dev = mt7996_hw_dev(hw);
 	struct mt76_phy *mphy = hw->priv;
 	u16 rate;
 	u8 i, idx;
@@ -596,6 +597,9 @@ mt7996_get_rates_table(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 
 	if (beacon) {
 		struct mt7996_phy *phy = mphy->priv;
+
+		if (dev->cert_mode && phy->mt76->band_idx == MT_BAND2)
+			rate = 0x0200;
 
 		/* odd index for driver, even index for firmware */
 		idx = MT7996_BEACON_RATES_TBL + 2 * phy->mt76->band_idx;
@@ -726,6 +730,10 @@ int mt7996_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 	u8 band_idx = mvif->phy->mt76->band_idx;
 	int ret, idx;
 
+#ifdef CONFIG_MTK_VENDOR
+	struct mt7996_phy *phy = &dev->phy;
+#endif
+
 	idx = mt76_wcid_alloc(dev->mt76.wcid_mask, MT7996_WTBL_STA);
 	if (idx < 0)
 		return -ENOSPC;
@@ -751,7 +759,28 @@ int mt7996_mac_sta_add(struct mt76_dev *mdev, struct ieee80211_vif *vif,
 	if (ret)
 		return ret;
 
-	return mt7996_mcu_add_rate_ctrl(dev, vif, sta, false);
+	ret = mt7996_mcu_add_rate_ctrl(dev, vif, sta, false);
+	if (ret)
+		return ret;
+
+#ifdef CONFIG_MTK_VENDOR
+	switch (band_idx) {
+	case MT_BAND1:
+		phy = mt7996_phy2(dev);
+		break;
+	case MT_BAND2:
+		phy = mt7996_phy3(dev);
+		break;
+	case MT_BAND0:
+	default:
+		break;
+	}
+
+	if (phy && phy->muru_onoff & MUMIMO_DL_CERT)
+		mt7996_mcu_set_mimo(phy);
+#endif
+
+	return 0;
 }
 
 void mt7996_mac_sta_remove(struct mt76_dev *mdev, struct ieee80211_vif *vif,

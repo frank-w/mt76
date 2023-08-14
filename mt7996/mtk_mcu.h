@@ -122,14 +122,15 @@ enum {
 };
 
 enum {
+	UNI_CMD_MURU_BSRP_CTRL = 0x01,
 	UNI_CMD_MURU_SUTX_CTRL = 0x10,
-	UNI_CMD_MURU_FIXED_RATE_CTRL,
-	UNI_CMD_MURU_FIXED_GROUP_RATE_CTRL,
+	UNI_CMD_MURU_FIXED_RATE_CTRL = 0x11,
+	UNI_CMD_MURU_FIXED_GROUP_RATE_CTRL = 0x12,
 	UNI_CMD_MURU_SET_FORCE_MU = 0x33,
 	UNI_CMD_MURU_MUNUAL_CONFIG = 0x64,
-	UNI_CMD_MURU_SET_MUDL_ACK_POLICY = 0xC9,
-	UNI_CMD_MURU_SET_TRIG_TYPE,
-	UNI_CMD_MURU_SET_20M_DYN_ALGO,
+	UNI_CMD_MURU_SET_MUDL_ACK_POLICY = 0xC8,
+	UNI_CMD_MURU_SET_TRIG_TYPE = 0xC9,
+	UNI_CMD_MURU_SET_20M_DYN_ALGO = 0xCA,
 	UNI_CMD_MURU_PROT_FRAME_THR = 0xCC,
 	UNI_CMD_MURU_SET_CERT_MU_EDCA_OVERRIDE,
 };
@@ -532,6 +533,179 @@ struct mt7996_mcu_sr_hw_ind_event {
 	u8 _rsv2[4];
 	__le32 sr_ampdu_mpdu_cnt;
 	__le32 sr_ampdu_mpdu_acked_cnt;
+};
+
+struct mt7996_muru_comm {
+	u8 pda_pol;
+	u8 band;
+	u8 spe_idx;
+	u8 proc_type;
+
+	__le16 mlo_ctrl;
+	u8 sch_type;
+	u8 ppdu_format;
+	u8 ac;
+	u8 _rsv[3];
+};
+
+struct mt7996_muru_dl {
+	u8 user_num;
+	u8 tx_mode;
+	u8 bw;
+	u8 gi;
+
+	u8 ltf;
+	u8 mcs;
+	u8 dcm;
+	u8 cmprs;
+
+	__le16 ru[16];
+
+	u8 c26[2];
+	u8 ack_policy;
+	u8 tx_power;
+
+	__le16 mu_ppdu_duration;
+	u8 agc_disp_order;
+	u8 _rsv1;
+
+	u8 agc_disp_pol;
+	u8 agc_disp_ratio;
+	__le16 agc_disp_linkMFG;
+
+	__le16 prmbl_punc_bmp;
+	u8 _rsv2[2];
+
+	struct {
+		__le16 wlan_idx;
+		u8 ru_alloc_seg;
+		u8 ru_idx;
+		u8 ldpc;
+		u8 nss;
+		u8 mcs;
+		u8 mu_group_idx;
+		u8 vht_groud_id;
+		u8 vht_up;
+		u8 he_start_stream;
+		u8 he_mu_spatial;
+		__le16 tx_power_alpha;
+		u8 ack_policy;
+		u8 ru_allo_ps160;
+	} usr[16];
+};
+
+struct mt7996_muru_ul {
+	u8 user_num;
+	u8 tx_mode;
+
+	u8 ba_type;
+	u8 _rsv;
+
+	u8 bw;
+	u8 gi_ltf;
+	__le16 ul_len;
+
+	__le16 trig_cnt;
+	u8 pad;
+	u8 trig_type;
+
+	__le16 trig_intv;
+	u8 trig_ta[ETH_ALEN];
+	__le16 ul_ru[16];
+
+	u8 c26[2];
+	__le16 agc_disp_linkMFG;
+
+	u8 agc_disp_mu_len;
+	u8 agc_disp_pol;
+	u8 agc_disp_ratio;
+	u8 agc_disp_pu_idx;
+
+	struct {
+		__le16 wlan_idx;
+		u8 ru_alloc_seg;
+		u8 ru_idx;
+		u8 ldpc;
+		u8 nss;
+		u8 mcs;
+		u8 target_rssi;
+		__le32 trig_pkt_size;
+		u8 ru_allo_ps160;
+		u8 _rsv2[3];
+	} usr[16];
+};
+
+struct mt7996_muru_dbg {
+	/* HE TB RX Debug */
+	__le32 rx_hetb_nonsf_en_bitmap;
+	__le32 rx_hetb_cfg[2];
+};
+
+struct mt7996_muru {
+	__le32 cfg_comm;
+	__le32 cfg_dl;
+	__le32 cfg_ul;
+	__le32 cfg_dbg;
+
+	struct mt7996_muru_comm comm;
+	struct mt7996_muru_dl dl;
+	struct mt7996_muru_ul ul;
+	struct mt7996_muru_dbg dbg;
+};
+
+
+#define MURU_PPDU_HE_TRIG	BIT(2)
+#define MURU_PPDU_HE_MU		BIT(3)
+
+#define MURU_OFDMA_SCH_TYPE_DL	BIT(0)
+#define MURU_OFDMA_SCH_TYPE_UL	BIT(1)
+
+/* Common Config */
+#define MURU_COMM_PPDU_FMT	BIT(0)
+#define MURU_COMM_SCH_TYPE	BIT(1)
+#define MURU_COMM_BAND		BIT(2)
+#define MURU_COMM_WMM		BIT(3)
+#define MURU_COMM_SPE_IDX	BIT(4)
+#define MURU_COMM_PROC_TYPE	BIT(5)
+#define MURU_COMM_SET		(MURU_COMM_PPDU_FMT | MURU_COMM_SCH_TYPE)
+#define MURU_COMM_SET_TM	(MURU_COMM_PPDU_FMT | MURU_COMM_BAND | \
+				 MURU_COMM_WMM | MURU_COMM_SPE_IDX)
+
+/* DL Common config */
+#define MURU_FIXED_DL_TOTAL_USER_CNT	BIT(4)
+
+/* UL Common Config */
+#define MURU_FIXED_UL_TOTAL_USER_CNT	BIT(4)
+
+enum {
+	CAPI_SU,
+	CAPI_MU,
+	CAPI_ER_SU,
+	CAPI_TB,
+	CAPI_LEGACY
+};
+
+enum {
+	CAPI_BASIC,
+	CAPI_BRP,
+	CAPI_MU_BAR,
+	CAPI_MU_RTS,
+	CAPI_BSRP,
+	CAPI_GCR_MU_BAR,
+	CAPI_BQRP,
+	CAPI_NDP_FRP,
+};
+
+enum {
+	MU_DL_ACK_POLICY_MU_BAR = 3,
+	MU_DL_ACK_POLICY_TF_FOR_ACK = 4,
+	MU_DL_ACK_POLICY_SU_BAR = 5,
+};
+
+enum muru_vendor_ctrl {
+	MU_CTRL_UPDATE,
+	MU_CTRL_DL_USER_CNT,
+	MU_CTRL_UL_USER_CNT,
 };
 #endif
 

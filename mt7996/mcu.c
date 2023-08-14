@@ -1359,6 +1359,10 @@ mt7996_mcu_sta_vht_tlv(struct sk_buff *skb, struct ieee80211_sta *sta)
 {
 	struct sta_rec_vht *vht;
 	struct tlv *tlv;
+#ifdef CONFIG_MTK_VENDOR
+	struct mt7996_sta *msta = (struct mt7996_sta *)sta->drv_priv;
+	struct mt7996_phy *phy = (struct mt7996_phy *)msta->vif->phy;
+#endif
 
 	/* For 6G band, this tlv is necessary to let hw work normally */
 	if (!sta->deflink.he_6ghz_capa.capa && !sta->deflink.vht_cap.vht_supported)
@@ -1370,6 +1374,9 @@ mt7996_mcu_sta_vht_tlv(struct sk_buff *skb, struct ieee80211_sta *sta)
 	vht->vht_cap = cpu_to_le32(sta->deflink.vht_cap.cap);
 	vht->vht_rx_mcs_map = sta->deflink.vht_cap.vht_mcs.rx_mcs_map;
 	vht->vht_tx_mcs_map = sta->deflink.vht_cap.vht_mcs.tx_mcs_map;
+#ifdef CONFIG_MTK_VENDOR
+	vht->rts_bw_sig = phy->rts_bw_sig;
+#endif
 }
 
 static void
@@ -4460,6 +4467,27 @@ int mt7996_mcu_set_rts_thresh(struct mt7996_phy *phy, u32 val)
 				 &req, sizeof(req), true);
 }
 
+int mt7996_mcu_set_band_confg(struct mt7996_phy *phy, u16 option, bool enable)
+{
+	struct {
+		u8 band_idx;
+		u8 _rsv[3];
+
+		__le16 tag;
+		__le16 len;
+		bool enable;
+		u8 _rsv2[3];
+	} __packed req = {
+		.band_idx = phy->mt76->band_idx,
+		.tag = cpu_to_le16(option),
+		.len = cpu_to_le16(sizeof(req) - 4),
+		.enable = enable,
+	};
+
+	return mt76_mcu_send_msg(&phy->dev->mt76, MCU_WM_UNI_CMD(BAND_CONFIG),
+				 &req, sizeof(req), true);
+}
+
 int mt7996_mcu_set_radio_en(struct mt7996_phy *phy, bool enable)
 {
 	struct {
@@ -4974,6 +5002,18 @@ void mt7996_set_wireless_vif(void *data, u8 *mac, struct ieee80211_vif *vif)
 	val = FIELD_GET(RATE_CFG_VAL, *((u32 *)data));
 
 	switch (mode) {
+	case RATE_PARAM_FIXED_OFDMA:
+		if (val == 3)
+			phy->muru_onoff = OFDMA_DL;
+		else
+			phy->muru_onoff = val;
+		break;
+	case RATE_PARAM_FIXED_MIMO:
+		if (val == 0)
+			phy->muru_onoff = MUMIMO_DL_CERT | MUMIMO_DL;
+		else
+			phy->muru_onoff = MUMIMO_UL;
+		break;
 	case RATE_PARAM_AUTO_MU:
 		if (val < 0 || val > 15) {
 			printk("Wrong value! The value is between 0-15.\n");

@@ -10,10 +10,31 @@
 #include "vendor.h"
 #include "mtk_mcu.h"
 
+#ifdef CONFIG_MTK_VENDOR
 static const struct nla_policy
 mu_ctrl_policy[NUM_MTK_VENDOR_ATTRS_MU_CTRL] = {
 	[MTK_VENDOR_ATTR_MU_CTRL_ONOFF] = {.type = NLA_U8 },
 	[MTK_VENDOR_ATTR_MU_CTRL_DUMP] = {.type = NLA_U8 },
+	[MTK_VENDOR_ATTR_MU_CTRL_STRUCT] = {.type = NLA_BINARY },
+};
+
+static const struct nla_policy
+wireless_ctrl_policy[NUM_MTK_VENDOR_ATTRS_WIRELESS_CTRL] = {
+	[MTK_VENDOR_ATTR_WIRELESS_CTRL_AMSDU] = {.type = NLA_U8 },
+	[MTK_VENDOR_ATTR_WIRELESS_CTRL_AMPDU] = {.type = NLA_U8 },
+	[MTK_VENDOR_ATTR_WIRELESS_CTRL_CERT] = {.type = NLA_U8 },
+	[MTK_VENDOR_ATTR_WIRELESS_CTRL_RTS_SIGTA] = {.type = NLA_U8 },
+	[MTK_VENDOR_ATTR_WIRELESS_CTRL_FIXED_MCS] = {.type = NLA_U8 },
+	[MTK_VENDOR_ATTR_WIRELESS_CTRL_OFDMA] = {.type = NLA_U8 },
+	[MTK_VENDOR_ATTR_WIRELESS_CTRL_PPDU_TX_TYPE] = {.type = NLA_U8 },
+	[MTK_VENDOR_ATTR_WIRELESS_CTRL_NUSERS_OFDMA] = {.type = NLA_U8 },
+	[MTK_VENDOR_ATTR_WIRELESS_CTRL_MIMO] = {.type = NLA_U8 },
+	[MTK_VENDOR_ATTR_WIRELESS_CTRL_BA_BUFFER_SIZE] = {.type = NLA_U16 },
+};
+
+static const struct nla_policy
+wireless_dump_policy[NUM_MTK_VENDOR_ATTRS_WIRELESS_DUMP] = {
+	[MTK_VENDOR_ATTR_WIRELESS_DUMP_AMSDU] = { .type = NLA_U8 },
 };
 
 static const struct nla_policy
@@ -70,6 +91,17 @@ ibf_ctrl_policy[NUM_MTK_VENDOR_ATTRS_IBF_CTRL] = {
 	[MTK_VENDOR_ATTR_IBF_CTRL_ENABLE] = { .type = NLA_U8 },
 };
 
+static const struct nla_policy
+rfeature_ctrl_policy[NUM_MTK_VENDOR_ATTRS_RFEATURE_CTRL] = {
+	[MTK_VENDOR_ATTR_RFEATURE_CTRL_HE_GI] = {.type = NLA_U8 },
+	[MTK_VENDOR_ATTR_RFEATURE_CTRL_HE_LTF] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_RFEATURE_CTRL_TRIG_TYPE_CFG] = { .type = NLA_NESTED },
+	[MTK_VENDOR_ATTR_RFEATURE_CTRL_TRIG_TYPE_EN] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_RFEATURE_CTRL_TRIG_TYPE] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_RFEATURE_CTRL_ACK_PLCY] = { .type = NLA_U8 },
+	[MTK_VENDOR_ATTR_RFEATURE_CTRL_TRIG_TXBF] = { .type = NLA_U8 },
+};
+
 struct mt7996_amnt_data {
 	u8 idx;
 	u8 addr[ETH_ALEN];
@@ -84,6 +116,8 @@ static int mt7996_vendor_mu_ctrl(struct wiphy *wiphy,
 {
 	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
 	struct nlattr *tb[NUM_MTK_VENDOR_ATTRS_MU_CTRL];
+	struct mt7996_phy *phy = mt7996_hw_phy(hw);
+	struct mt7996_muru *muru;
 	int err;
 	u8 val8;
 	u32 val32 = 0;
@@ -99,9 +133,17 @@ static int mt7996_vendor_mu_ctrl(struct wiphy *wiphy,
 			 FIELD_PREP(RATE_CFG_VAL, val8);
 		ieee80211_iterate_active_interfaces_atomic(hw, IEEE80211_IFACE_ITER_RESUME_ALL,
 							   mt7996_set_wireless_vif, &val32);
+	} else if (tb[MTK_VENDOR_ATTR_MU_CTRL_STRUCT]) {
+		muru = kzalloc(sizeof(struct mt7996_muru), GFP_KERNEL);
+
+		nla_memcpy(muru, tb[MTK_VENDOR_ATTR_MU_CTRL_STRUCT],
+			   sizeof(struct mt7996_muru));
+
+		err = mt7996_mcu_set_muru_cfg(phy, muru);
+		kfree(muru);
 	}
 
-	return 0;
+	return err;
 }
 
 static int
@@ -123,6 +165,48 @@ mt7996_vendor_mu_ctrl_dump(struct wiphy *wiphy, struct wireless_dev *wdev,
 
 	return len;
 }
+
+void mt7996_set_wireless_rts_sigta(struct ieee80211_hw *hw, u8 value) {
+	struct mt7996_phy *phy = mt7996_hw_phy(hw);
+
+	switch (value) {
+	case BW_SIGNALING_STATIC:
+	case BW_SIGNALING_DYNAMIC:
+		mt7996_mcu_set_band_confg(phy, UNI_BAND_CONFIG_RTS_SIGTA_EN, true);
+		mt7996_mcu_set_band_confg(phy, UNI_BAND_CONFIG_DIS_SECCH_CCA_DET, false);
+		break;
+	default:
+		value = BW_SIGNALING_DISABLE;
+		mt7996_mcu_set_band_confg(phy, UNI_BAND_CONFIG_RTS_SIGTA_EN, false);
+		mt7996_mcu_set_band_confg(phy, UNI_BAND_CONFIG_DIS_SECCH_CCA_DET, true);
+		break;
+      }
+
+	phy->rts_bw_sig = value;
+
+	/* Set RTS Threshold to a lower Value */
+	mt7996_mcu_set_rts_thresh(phy, 500);
+}
+
+static int
+mt7996_vendor_wireless_ctrl_dump(struct wiphy *wiphy, struct wireless_dev *wdev,
+				 struct sk_buff *skb, const void *data, int data_len,
+				 unsigned long *storage)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	int len = 0;
+
+	if (*storage == 1)
+		return -ENOENT;
+	*storage = 1;
+
+	if (nla_put_u8(skb, MTK_VENDOR_ATTR_WIRELESS_DUMP_AMSDU,
+		       ieee80211_hw_check(hw, SUPPORTS_AMSDU_IN_AMPDU)))
+	return -ENOMEM;
+	len += 1;
+
+	return len;
+ }
 
 void mt7996_vendor_amnt_fill_rx(struct mt7996_phy *phy, struct sk_buff *skb)
 {
@@ -647,6 +731,126 @@ mt7996_vendor_ibf_ctrl_dump(struct wiphy *wiphy, struct wireless_dev *wdev,
 	return 1;
 }
 
+static int mt7996_vendor_rfeature_ctrl(struct wiphy *wiphy,
+				       struct wireless_dev *wdev,
+				       const void *data,
+				       int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct mt7996_phy *phy = mt7996_hw_phy(hw);
+	struct mt7996_dev *dev = phy->dev;
+	struct nlattr *tb[NUM_MTK_VENDOR_ATTRS_RFEATURE_CTRL];
+	int err;
+	u32 val;
+
+	err = nla_parse(tb, MTK_VENDOR_ATTR_RFEATURE_CTRL_MAX, data, data_len,
+			rfeature_ctrl_policy, NULL);
+	if (err)
+		return err;
+
+	val = CAPI_RFEATURE_CHANGED;
+
+	if (tb[MTK_VENDOR_ATTR_RFEATURE_CTRL_TRIG_TYPE_CFG]) {
+		u8 enable, trig_type;
+		int rem;
+		struct nlattr *cur;
+
+		nla_for_each_nested(cur, tb[MTK_VENDOR_ATTR_RFEATURE_CTRL_TRIG_TYPE_CFG], rem) {
+			switch (nla_type(cur)) {
+			case MTK_VENDOR_ATTR_RFEATURE_CTRL_TRIG_TYPE_EN:
+				enable = nla_get_u8(cur);
+				break;
+			case MTK_VENDOR_ATTR_RFEATURE_CTRL_TRIG_TYPE:
+				trig_type = nla_get_u8(cur);
+				break;
+			default:
+				return -EINVAL;
+			};
+		}
+
+		err = mt7996_mcu_set_rfeature_trig_type(phy, enable, trig_type);
+		if (err)
+			return err;
+	} else if (tb[MTK_VENDOR_ATTR_RFEATURE_CTRL_ACK_PLCY]) {
+		u8 ack_policy;
+
+		ack_policy = nla_get_u8(tb[MTK_VENDOR_ATTR_RFEATURE_CTRL_ACK_PLCY]);
+		switch (ack_policy) {
+		case MU_DL_ACK_POLICY_TF_FOR_ACK:
+			return mt7996_mcu_set_muru_cmd(dev, UNI_CMD_MURU_SET_MUDL_ACK_POLICY,
+						       ack_policy);
+		default:
+			return 0;
+		}
+	}
+
+	return 0;
+}
+
+static int mt7996_vendor_wireless_ctrl(struct wiphy *wiphy,
+				       struct wireless_dev *wdev,
+				       const void *data,
+				       int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct mt7996_phy *phy = mt7996_hw_phy(hw);
+	struct mt7996_dev *dev = phy->dev;
+	struct nlattr *tb[NUM_MTK_VENDOR_ATTRS_WIRELESS_CTRL];
+	int err;
+	u8 val8;
+	u16 val16;
+	u32 val32;
+
+	err = nla_parse(tb, MTK_VENDOR_ATTR_WIRELESS_CTRL_MAX, data, data_len,
+			wireless_ctrl_policy, NULL);
+	if (err)
+		return err;
+
+	val32 = CAPI_WIRELESS_CHANGED;
+
+	if (tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_OFDMA]) {
+		val8 = nla_get_u8(tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_OFDMA]);
+		val32 |= FIELD_PREP(RATE_CFG_MODE, RATE_PARAM_FIXED_OFDMA) |
+			 FIELD_PREP(RATE_CFG_VAL, val8);
+		ieee80211_iterate_active_interfaces_atomic(hw, IEEE80211_IFACE_ITER_RESUME_ALL,
+			mt7996_set_wireless_vif, &val32);
+		if (val8 == 3) /* DL20and80 */
+			mt7996_mcu_set_muru_cmd(dev, UNI_CMD_MURU_SET_20M_DYN_ALGO, 1);
+	} else if (tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_BA_BUFFER_SIZE]) {
+		val16 = nla_get_u16(tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_BA_BUFFER_SIZE]);
+		hw->max_tx_aggregation_subframes = val16;
+		hw->max_rx_aggregation_subframes = val16;
+	} else if (tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_PPDU_TX_TYPE]) {
+		val8 = nla_get_u8(tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_PPDU_TX_TYPE]);
+		mt7996_mcu_set_ppdu_tx_type(phy, val8);
+	} else if (tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_NUSERS_OFDMA]) {
+		val8 = nla_get_u8(tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_NUSERS_OFDMA]);
+		if (phy->muru_onoff & OFDMA_UL)
+			mt7996_mcu_set_nusers_ofdma(phy, MU_CTRL_UL_USER_CNT, val8);
+		else
+			mt7996_mcu_set_nusers_ofdma(phy, MU_CTRL_DL_USER_CNT, val8);
+	} else if (tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_MIMO]) {
+		val8 = nla_get_u8(tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_MIMO]);
+		val32 |= FIELD_PREP(RATE_CFG_MODE, RATE_PARAM_FIXED_MIMO) |
+			 FIELD_PREP(RATE_CFG_VAL, val8);
+		ieee80211_iterate_active_interfaces_atomic(hw, IEEE80211_IFACE_ITER_RESUME_ALL,
+			mt7996_set_wireless_vif, &val32);
+	} else if (tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_CERT]) {
+		val8 = nla_get_u8(tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_CERT]);
+		dev->cert_mode = val8;
+		mt7996_mcu_set_cert(phy, val8);
+		mt7996_mcu_set_bypass_smthint(phy, val8);
+	} else if (tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_AMSDU]) {
+		val8 = nla_get_u8(tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_AMSDU]);
+		mt7996_set_wireless_amsdu(hw, val8);
+	} else if (tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_RTS_SIGTA]) {
+		val8 = nla_get_u8(tb[MTK_VENDOR_ATTR_WIRELESS_CTRL_RTS_SIGTA]);
+		mt7996_set_wireless_rts_sigta(hw, val8);
+	}
+
+	return 0;
+}
+
 static const struct wiphy_vendor_command mt7996_vendor_commands[] = {
 	{
 		.info = {
@@ -659,6 +863,18 @@ static const struct wiphy_vendor_command mt7996_vendor_commands[] = {
 		.dumpit = mt7996_vendor_mu_ctrl_dump,
 		.policy = mu_ctrl_policy,
 		.maxattr = MTK_VENDOR_ATTR_MU_CTRL_MAX,
+	},
+	{
+		.info = {
+		        .vendor_id = MTK_NL80211_VENDOR_ID,
+		        .subcmd = MTK_NL80211_VENDOR_SUBCMD_WIRELESS_CTRL,
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV |
+		        WIPHY_VENDOR_CMD_NEED_RUNNING,
+		.doit = mt7996_vendor_wireless_ctrl,
+		.dumpit = mt7996_vendor_wireless_ctrl_dump,
+		.policy = wireless_ctrl_policy,
+		.maxattr = MTK_VENDOR_ATTR_WIRELESS_CTRL_MAX,
 	},
 	{
 		.info = {
@@ -718,6 +934,17 @@ static const struct wiphy_vendor_command mt7996_vendor_commands[] = {
 		.policy = ibf_ctrl_policy,
 		.maxattr = MTK_VENDOR_ATTR_IBF_CTRL_MAX,
 	},
+	{
+		.info = {
+			.vendor_id = MTK_NL80211_VENDOR_ID,
+			.subcmd = MTK_NL80211_VENDOR_SUBCMD_RFEATURE_CTRL,
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV |
+			WIPHY_VENDOR_CMD_NEED_RUNNING,
+		.doit = mt7996_vendor_rfeature_ctrl,
+		.policy = rfeature_ctrl_policy,
+		.maxattr = MTK_VENDOR_ATTR_RFEATURE_CTRL_MAX,
+	},
 };
 
 void mt7996_vendor_register(struct mt7996_phy *phy)
@@ -727,3 +954,4 @@ void mt7996_vendor_register(struct mt7996_phy *phy)
 
 	spin_lock_init(&phy->amnt_lock);
 }
+#endif

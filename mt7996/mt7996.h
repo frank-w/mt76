@@ -349,6 +349,7 @@ struct mt7996_phy {
 	} test;
 #endif
 #ifdef CONFIG_MTK_VENDOR
+	u8 rts_bw_sig;
 	spinlock_t amnt_lock;
 	struct mt7996_air_monitor_ctrl amnt_ctrl;
 #endif
@@ -475,6 +476,9 @@ struct mt7996_dev {
 		u32 bcn_total_cnt[__MT_MAX_BAND];
 	} dbg;
 	const struct mt7996_dbg_reg_desc *dbg_reg;
+#endif
+#ifdef CONFIG_MTK_VENDOR
+	bool cert_mode;
 #endif
 };
 
@@ -673,6 +677,7 @@ void mt7996_tm_rf_test_event(struct mt7996_dev *dev, struct sk_buff *skb);
 int mt7996_mcu_get_tx_power_info(struct mt7996_phy *phy, u8 category, void *event);
 int mt7996_mcu_set_scs(struct mt7996_phy *phy, u8 enable);
 void mt7996_mcu_scs_sta_poll(struct work_struct *work);
+int mt7996_mcu_set_band_confg(struct mt7996_phy *phy, u16 option, bool enable);
 
 static inline u8 mt7996_max_interface_num(struct mt7996_dev *dev)
 {
@@ -791,6 +796,10 @@ void mt7996_vendor_register(struct mt7996_phy *phy);
 void mt7996_vendor_amnt_fill_rx(struct mt7996_phy *phy, struct sk_buff *skb);
 int mt7996_vendor_amnt_sta_remove(struct mt7996_phy *phy,
 				  struct ieee80211_sta *sta);
+void mt7996_set_wireless_amsdu(struct ieee80211_hw *hw, u8 en);
+void mt7996_mcu_set_mimo(struct mt7996_phy *phy);
+int mt7996_set_muru_cfg(struct mt7996_phy *phy, u8 action, u8 val);
+int mt7996_mcu_set_muru_cfg(struct mt7996_phy *phy, void *data);
 #endif
 
 int mt7996_mcu_edcca_enable(struct mt7996_phy *phy, bool enable);
@@ -818,6 +827,10 @@ int mt7996_mcu_set_txbf_snd_info(struct mt7996_phy *phy, void *para);
 int mt7996_mcu_set_muru_cmd(struct mt7996_dev *dev, u16 action, int val);
 int mt7996_mcu_muru_set_prot_frame_thr(struct mt7996_dev *dev, u32 val);
 int mt7996_mcu_set_bypass_smthint(struct mt7996_phy *phy, u8 val);
+int mt7996_mcu_set_rfeature_trig_type(struct mt7996_phy *phy, u8 enable, u8 trig_type);
+void mt7996_mcu_set_ppdu_tx_type(struct mt7996_phy *phy, u8 ppdu_type);
+void mt7996_mcu_set_nusers_ofdma(struct mt7996_phy *phy, u8 type, u8 ofdma_user_cnt);
+void mt7996_mcu_set_cert(struct mt7996_phy *phy, u8 type);
 #endif
 
 #ifdef CONFIG_NET_MEDIATEK_SOC_WED

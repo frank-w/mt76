@@ -984,4 +984,209 @@ int mt7996_mcu_set_bypass_smthint(struct mt7996_phy *phy, u8 val)
 				 true);
 }
 
+int mt7996_mcu_set_bsrp_ctrl(struct mt7996_phy *phy, u16 interval,
+			     u16 ru_alloc, u32 trig_type, u8 trig_flow, u8 ext_cmd)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct {
+		u8 _rsv[4];
+
+		__le16 tag;
+		__le16 len;
+
+		__le16 interval;
+		__le16 ru_alloc;
+		__le32 trigger_type;
+		u8 trigger_flow;
+		u8 ext_cmd_bsrp;
+		u8 band_bitmap;
+		u8 _rsv2;
+	} __packed req = {
+		.tag = cpu_to_le16(UNI_CMD_MURU_BSRP_CTRL),
+		.len = cpu_to_le16(sizeof(req) - 4),
+		.interval = cpu_to_le16(interval),
+		.ru_alloc = cpu_to_le16(ru_alloc),
+		.trigger_type = cpu_to_le32(trig_type),
+		.trigger_flow = trig_flow,
+		.ext_cmd_bsrp = ext_cmd,
+		.band_bitmap = BIT(phy->mt76->band_idx),
+	};
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(MURU), &req,
+				 sizeof(req), false);
+}
+
+int mt7996_mcu_set_rfeature_trig_type(struct mt7996_phy *phy, u8 enable, u8 trig_type)
+{
+	struct mt7996_dev *dev = phy->dev;
+	int ret = 0;
+	char buf[] = "01:00:00:1B";
+
+	if (enable) {
+		ret = mt7996_mcu_set_muru_cmd(dev, UNI_CMD_MURU_SET_TRIG_TYPE, trig_type);
+		if (ret)
+			return ret;
+	}
+
+	switch (trig_type) {
+	case CAPI_BASIC:
+		return mt7996_mcu_set_bsrp_ctrl(phy, 5, 67, 0, 0, enable);
+	case CAPI_BRP:
+		return mt7996_mcu_set_txbf_snd_info(phy, buf);
+	case CAPI_MU_BAR:
+		return mt7996_mcu_set_muru_cmd(dev, UNI_CMD_MURU_SET_MUDL_ACK_POLICY,
+					       MU_DL_ACK_POLICY_MU_BAR);
+	case CAPI_BSRP:
+		return mt7996_mcu_set_bsrp_ctrl(phy, 5, 67, 4, 0, enable);
+	default:
+		return 0;
+	}
+}
+
+int mt7996_mcu_set_muru_cfg(struct mt7996_phy *phy, void *data)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct mt7996_muru *muru;
+	struct {
+		u8 _rsv[4];
+
+		__le16 tag;
+		__le16 len;
+
+		u8 version;
+		u8 revision;
+		u8 _rsv2[2];
+
+		struct mt7996_muru muru;
+	} __packed req = {
+		.tag = cpu_to_le16(UNI_CMD_MURU_MUNUAL_CONFIG),
+		.len = cpu_to_le16(sizeof(req) - 4),
+		.version = UNI_CMD_MURU_VER_EHT,
+	};
+
+	muru = (struct mt7996_muru *) data;
+	memcpy(&req.muru, muru, sizeof(struct mt7996_muru));
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(MURU), &req,
+				 sizeof(req), false);
+}
+
+int mt7996_set_muru_cfg(struct mt7996_phy *phy, u8 action, u8 val)
+{
+	struct mt7996_muru *muru;
+	struct mt7996_muru_dl *dl;
+	struct mt7996_muru_ul *ul;
+	struct mt7996_muru_comm *comm;
+	int ret = 0;
+
+	muru = kzalloc(sizeof(struct mt7996_muru), GFP_KERNEL);
+	dl = &muru->dl;
+	ul = &muru->ul;
+	comm = &muru->comm;
+
+	switch (action) {
+	case MU_CTRL_DL_USER_CNT:
+		dl->user_num = val;
+		comm->ppdu_format = MURU_PPDU_HE_MU;
+		comm->sch_type = MURU_OFDMA_SCH_TYPE_DL;
+		muru->cfg_comm = cpu_to_le32(MURU_COMM_SET);
+		muru->cfg_dl = cpu_to_le32(MURU_FIXED_DL_TOTAL_USER_CNT);
+		ret = mt7996_mcu_set_muru_cfg(phy, muru);
+		break;
+	case MU_CTRL_UL_USER_CNT:
+		ul->user_num = val;
+		comm->ppdu_format = MURU_PPDU_HE_TRIG;
+		comm->sch_type = MURU_OFDMA_SCH_TYPE_UL;
+		muru->cfg_comm = cpu_to_le32(MURU_COMM_SET);
+		muru->cfg_ul = cpu_to_le32(MURU_FIXED_UL_TOTAL_USER_CNT);
+		ret = mt7996_mcu_set_muru_cfg(phy, muru);
+		break;
+	default:
+		break;
+	}
+
+	kfree(muru);
+	return ret;
+}
+
+void mt7996_mcu_set_ppdu_tx_type(struct mt7996_phy *phy, u8 ppdu_type)
+{
+	struct mt7996_dev *dev = phy->dev;
+	int enable_su;
+
+	switch (ppdu_type) {
+	case CAPI_SU:
+		enable_su = 1;
+		mt7996_mcu_set_muru_cmd(dev, UNI_CMD_MURU_SUTX_CTRL, enable_su);
+		mt7996_set_muru_cfg(phy, MU_CTRL_DL_USER_CNT, 0);
+		break;
+	case CAPI_MU:
+		enable_su = 0;
+		mt7996_mcu_set_muru_cmd(dev, UNI_CMD_MURU_SUTX_CTRL, enable_su);
+		break;
+	default:
+		break;
+	}
+}
+
+void mt7996_mcu_set_nusers_ofdma(struct mt7996_phy *phy, u8 type, u8 user_cnt)
+{
+	struct mt7996_dev *dev = phy->dev;
+	int enable_su = 0;
+
+	mt7996_mcu_set_muru_cmd(dev, UNI_CMD_MURU_SUTX_CTRL, enable_su);
+	mt7996_mcu_set_muru_cmd(dev, UNI_CMD_MURU_SET_MUDL_ACK_POLICY, MU_DL_ACK_POLICY_SU_BAR);
+	mt7996_mcu_muru_set_prot_frame_thr(dev, 9999);
+
+	mt7996_set_muru_cfg(phy, type, user_cnt);
+}
+
+void mt7996_mcu_set_mimo(struct mt7996_phy *phy)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct cfg80211_chan_def *chandef = &phy->mt76->chandef;
+	int disable_ra = 1;
+	char buf[] = "2 134 0 1 0 1 2 2 2";
+	int force_mu = 1;
+
+	switch (chandef->width) {
+	case NL80211_CHAN_WIDTH_20_NOHT:
+	case NL80211_CHAN_WIDTH_20:
+		strscpy(buf, "2 122 0 1 0 1 2 2 2", sizeof(buf));
+		break;
+	case NL80211_CHAN_WIDTH_80:
+		break;
+	case NL80211_CHAN_WIDTH_160:
+		strscpy(buf, "2 137 0 1 0 1 2 2 2", sizeof(buf));
+		break;
+	default:
+		break;
+	}
+
+	mt7996_mcu_set_muru_cmd(dev, UNI_CMD_MURU_SET_MUDL_ACK_POLICY, MU_DL_ACK_POLICY_SU_BAR);
+	mt7996_mcu_set_muru_fixed_rate_enable(dev, UNI_CMD_MURU_FIXED_RATE_CTRL, disable_ra);
+	mt7996_mcu_set_muru_fixed_rate_parameter(dev, UNI_CMD_MURU_FIXED_GROUP_RATE_CTRL, buf);
+	mt7996_mcu_set_muru_cmd(dev, UNI_CMD_MURU_SET_FORCE_MU, force_mu);
+}
+
+void mt7996_mcu_set_cert(struct mt7996_phy *phy, u8 type)
+{
+	struct mt7996_dev *dev = phy->dev;
+	struct {
+		u8 _rsv[4];
+
+		__le16 tag;
+		__le16 len;
+		u8 action;
+		u8 _rsv2[3];
+	} __packed req = {
+		.tag = cpu_to_le16(UNI_CMD_CERT_CFG),
+		.len = cpu_to_le16(sizeof(req) - 4),
+		.action = type, /* 1: CAPI Enable */
+	};
+
+	mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(WSYS_CONFIG), &req,
+			  sizeof(req), false);
+}
+
 #endif

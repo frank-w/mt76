@@ -10,6 +10,7 @@
 #include "../dma.h"
 #include "mac.h"
 #include "mcu.h"
+#include "vendor.h"
 
 #define to_rssi(field, rcpi)	((FIELD_GET(field, rcpi) - 220) / 2)
 
@@ -2270,6 +2271,14 @@ void mt7996_mac_update_stats(struct mt7996_phy *phy)
 		cnt = mt76_rr(dev, MT_TX_AGG_CNT(band_idx, i));
 		phy->mt76->aggr_stats[i] += cnt;
 	}
+}
+
+void mt7996_set_wireless_amsdu(struct ieee80211_hw *hw, u8 en)
+{
+	if (en)
+		ieee80211_hw_set(hw, SUPPORTS_AMSDU_IN_AMPDU);
+	else
+		ieee80211_hw_clear(hw, SUPPORTS_AMSDU_IN_AMPDU);
 }
 
 void mt7996_mac_sta_rc_work(struct work_struct *work)
