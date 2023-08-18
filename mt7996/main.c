@@ -251,6 +251,7 @@ static int mt7996_add_interface(struct ieee80211_hw *hw,
 	mvif->sta.wcid.phy_idx = band_idx;
 	mvif->sta.wcid.hw_key_idx = -1;
 	mvif->sta.wcid.tx_info |= MT_WCID_TX_INFO_SET;
+	mvif->sta.vif = mvif;
 	mt76_wcid_init(&mvif->sta.wcid);
 
 	mt7996_mac_wtbl_update(dev, idx,

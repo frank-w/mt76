@@ -521,6 +521,27 @@ mt7996_mcu_update_tx_gi(struct rate_info *rate, struct all_sta_trx_rate *mcu_rat
 	return 0;
 }
 
+static inline void __mt7996_stat_to_netdev(struct mt76_phy *mphy,
+					   struct mt76_wcid *wcid,
+					   u32 tx_bytes, u32 rx_bytes,
+					   u32 tx_packets, u32 rx_packets)
+{
+	struct mt7996_sta *msta;
+	struct ieee80211_vif *vif;
+	struct wireless_dev *wdev;
+
+	if (wiphy_ext_feature_isset(mphy->hw->wiphy,
+				    NL80211_EXT_FEATURE_STAS_COUNT)) {
+		msta = container_of(wcid, struct mt7996_sta, wcid);
+		vif = container_of((void *)msta->vif, struct ieee80211_vif,
+				   drv_priv);
+		wdev = ieee80211_vif_to_wdev(vif);
+
+		dev_sw_netstats_tx_add(wdev->netdev, tx_packets, tx_bytes);
+		dev_sw_netstats_rx_add(wdev->netdev, rx_packets, rx_bytes);
+	}
+}
+
 static void
 mt7996_mcu_rx_all_sta_info_event(struct mt7996_dev *dev, struct sk_buff *skb)
 {
@@ -536,7 +557,7 @@ mt7996_mcu_rx_all_sta_info_event(struct mt7996_dev *dev, struct sk_buff *skb)
 		u16 wlan_idx;
 		struct mt76_wcid *wcid;
 		struct mt76_phy *mphy;
-		u32 tx_bytes, rx_bytes;
+		u32 tx_bytes, rx_bytes, tx_packets, rx_packets;
 
 		switch (le16_to_cpu(res->tag)) {
 		case UNI_ALL_STA_TXRX_RATE:
@@ -564,6 +585,9 @@ mt7996_mcu_rx_all_sta_info_event(struct mt7996_dev *dev, struct sk_buff *skb)
 				wcid->stats.tx_bytes += tx_bytes;
 				wcid->stats.rx_bytes += rx_bytes;
 
+				__mt7996_stat_to_netdev(mphy, wcid,
+							tx_bytes, rx_bytes, 0, 0);
+
 				ieee80211_tpt_led_trig_tx(mphy->hw, tx_bytes);
 				ieee80211_tpt_led_trig_rx(mphy->hw, rx_bytes);
 			}
@@ -575,10 +599,16 @@ mt7996_mcu_rx_all_sta_info_event(struct mt7996_dev *dev, struct sk_buff *skb)
 			if (!wcid)
 				break;
 
-			wcid->stats.tx_packets +=
-				le32_to_cpu(res->msdu_cnt[i].tx_msdu_cnt);
-			wcid->stats.rx_packets +=
-				le32_to_cpu(res->msdu_cnt[i].rx_msdu_cnt);
+			mphy = mt76_dev_phy(&dev->mt76, wcid->phy_idx);
+
+			tx_packets = le32_to_cpu(res->msdu_cnt[i].tx_msdu_cnt);
+			rx_packets = le32_to_cpu(res->msdu_cnt[i].rx_msdu_cnt);
+
+			wcid->stats.tx_packets += tx_packets;
+			wcid->stats.rx_packets += rx_packets;
+
+			__mt7996_stat_to_netdev(mphy, wcid, 0, 0,
+						tx_packets, rx_packets);
 			break;
 		default:
 			break;
