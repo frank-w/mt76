@@ -802,6 +802,7 @@ void mt7996_rro_hw_init(struct mt7996_dev *dev)
 	/* interrupt enable */
 	mt76_wr(dev, MT_RRO_HOST_INT_ENA,
 		MT_RRO_HOST_INT_ENA_HOST_RRO_DONE_ENA);
+
 #endif
 }
 
@@ -852,6 +853,17 @@ static int mt7996_wed_rro_init(struct mt7996_dev *dev)
 
 		wed->wlan.ind_cmd.addr_elem_phys[i] =
 			dev->wed_rro.addr_elem[i].phy_addr;
+	}
+
+	for (i = 0; i < MT7996_RRO_MSDU_PG_CR_CNT; i++) {
+		ptr = dmam_alloc_coherent(dev->mt76.dma_dev, MT7996_RRO_MSDU_PG_SIZE_PER_CR,
+					  &dev->wed_rro.msdu_pg[i].phy_addr,
+					  GFP_KERNEL);
+		if (!ptr)
+			return -ENOMEM;
+		dev->wed_rro.msdu_pg[i].ptr = ptr;
+
+		memset(dev->wed_rro.msdu_pg[i].ptr, 0, MT7996_RRO_MSDU_PG_SIZE_PER_CR);
 	}
 
 	ptr = dmam_alloc_coherent(dev->mt76.dma_dev,

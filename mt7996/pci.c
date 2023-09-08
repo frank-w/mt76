@@ -107,7 +107,7 @@ static int mt7996_pci_probe(struct pci_dev *pdev,
 	struct pci_dev *hif2_dev;
 	struct mt7996_hif *hif2;
 	struct mt7996_dev *dev;
-	int irq, hif2_irq, ret;
+	int irq, ret;
 	struct mt76_dev *mdev;
 
 	hif2_enable |= (id->device == 0x7990 || id->device == 0x7991);
@@ -143,6 +143,8 @@ static int mt7996_pci_probe(struct pci_dev *pdev,
 	mdev = &dev->mt76;
 	mt7996_wfsys_reset(dev);
 	hif2 = mt7996_pci_init_hif2(pdev);
+	if (hif2)
+		dev->hif2 = hif2;
 
 	ret = mt7996_mmio_wed_init(dev, pdev, false, &irq);
 	if (ret < 0)
@@ -167,9 +169,11 @@ static int mt7996_pci_probe(struct pci_dev *pdev,
 
 	if (hif2) {
 		hif2_dev = container_of(hif2->dev, struct pci_dev, dev);
-		dev->hif2 = hif2;
+		ret = 0;
 
-		ret = mt7996_mmio_wed_init(dev, hif2_dev, true, &hif2_irq);
+		if (is_mt7996(&dev->mt76))
+			ret = mt7996_mmio_wed_init(dev, hif2_dev, true, &irq);
+
 		if (ret < 0)
 			goto free_wed_or_irq_vector;
 

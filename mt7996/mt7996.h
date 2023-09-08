@@ -122,6 +122,10 @@
 #define MT7996_DRR_STA_AC2_QNTM_MASK	GENMASK(18, 16)
 #define MT7996_DRR_STA_AC3_QNTM_MASK	GENMASK(22, 20)
 
+/* RRO 3.1 */
+#define MT7996_RRO_MSDU_PG_CR_CNT 8
+#define MT7996_RRO_MSDU_PG_SIZE_PER_CR 0x10000
+
 struct mt7996_vif;
 struct mt7996_sta;
 struct mt7996_dfs_pulse;
@@ -181,7 +185,7 @@ enum mt7996_rxq_id {
 	MT7996_RXQ_BAND1 = 5, /* for mt7992 */
 	MT7996_RXQ_BAND2 = 5,
 	MT7996_RXQ_RRO_BAND0 = 8,
-	MT7996_RXQ_RRO_BAND1 = 8,/* unused */
+	MT7996_RXQ_RRO_BAND1 = 9,
 	MT7996_RXQ_RRO_BAND2 = 6,
 	MT7996_RXQ_MSDU_PG_BAND0 = 10,
 	MT7996_RXQ_MSDU_PG_BAND1 = 11,
@@ -541,6 +545,10 @@ struct mt7996_dev {
 			void *ptr;
 			dma_addr_t phy_addr;
 		} session;
+		struct {
+			void *ptr;
+			dma_addr_t phy_addr;
+		} msdu_pg[MT7996_RRO_MSDU_PG_CR_CNT];
 
 		struct work_struct work;
 		struct list_head poll_list;
