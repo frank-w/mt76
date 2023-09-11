@@ -35,6 +35,15 @@ static const struct ieee80211_channel mt76_channels_5ghz[] = {
 	CHAN5G(60, 5300),
 	CHAN5G(64, 5320),
 
+	CHAN5G(68, 5340),
+	CHAN5G(72, 5360),
+	CHAN5G(76, 5380),
+	CHAN5G(80, 5400),
+	CHAN5G(84, 5420),
+	CHAN5G(88, 5440),
+	CHAN5G(92, 5460),
+	CHAN5G(96, 5480),
+
 	CHAN5G(100, 5500),
 	CHAN5G(104, 5520),
 	CHAN5G(108, 5540),

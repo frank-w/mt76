@@ -531,6 +531,11 @@ mt7996_tm_dpd_prek_send_req(struct mt7996_phy *phy, struct mt7996_tm_req *req,
 	memcpy(&chandef_backup, chandef, sizeof(struct cfg80211_chan_def));
 
 	for (i = 0; i < channel_size; i++) {
+		if (chan_list[i].band == NL80211_BAND_5GHZ &&
+		    chan_list[i].hw_value >= dpd_5g_skip_ch_list[0].hw_value &&
+		    chan_list[i].hw_value <= dpd_5g_skip_ch_list[dpd_5g_skip_ch_num - 1].hw_value)
+			continue;
+
 		memcpy(chandef->chan, &chan_list[i], sizeof(struct ieee80211_channel));
 		chandef->width = width;
 
@@ -612,7 +617,8 @@ mt7996_tm_dpd_prek(struct mt7996_phy *phy, enum mt76_testmode_state state)
 						  NL80211_CHAN_WIDTH_20, RF_DPD_FLAT_5G_CAL);
 		if (ret)
 			return ret;
-		wait_on_prek_offset += mphy->sband_5g.sband.n_channels * DPD_PER_CH_BW20_SIZE;
+		wait_on_prek_offset += (mphy->sband_5g.sband.n_channels - dpd_5g_skip_ch_num) *
+				       DPD_PER_CH_BW20_SIZE;
 		wait_event_timeout(mdev->mcu.wait,
 				   dev->cur_prek_offset == wait_on_prek_offset, 30 * HZ);
 
@@ -868,6 +874,7 @@ mt7996_tm_get_center_chan(struct mt7996_phy *phy, struct cfg80211_chan_def *chan
 	const struct ieee80211_channel *chan = mphy->sband_5g.sband.channels;
 	u32 bitmap, i, offset, width_mhz, size = mphy->sband_5g.sband.n_channels;
 	u16 first_control = 0, control_chan = chandef->chan->hw_value;
+	bool not_first;
 
 	bitmap = mt7996_tm_bw_mapping(chandef->width, BW_MAP_NL_TO_CONTROL_BITMAP_5G);
 	if (!bitmap)
@@ -877,7 +884,9 @@ mt7996_tm_get_center_chan(struct mt7996_phy *phy, struct cfg80211_chan_def *chan
 	offset = width_mhz / 10 - 2;
 
 	for (i = 0; i < size; i++) {
-		if (!((1 << i) & bitmap))
+		not_first = (chandef->width != NL80211_CHAN_WIDTH_160) ?
+			    (i % bitmap) : (i >= 32) || !((1 << i) & bitmap);
+		if (not_first)
 			continue;
 
 		if (control_chan >= chan[i].hw_value)
@@ -886,7 +895,7 @@ mt7996_tm_get_center_chan(struct mt7996_phy *phy, struct cfg80211_chan_def *chan
 			break;
 	}
 
-	if (i == size || first_control == 0)
+	if (first_control == 0)
 		return control_chan;
 
 	return first_control + offset;

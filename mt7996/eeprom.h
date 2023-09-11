@@ -67,6 +67,8 @@ enum mt7996_eeprom_field {
 
 extern const struct ieee80211_channel dpd_2g_ch_list_bw20[];
 extern const u32 dpd_2g_bw20_ch_num;
+extern const struct ieee80211_channel dpd_5g_skip_ch_list[];
+extern const u32 dpd_5g_skip_ch_num;
 extern const struct ieee80211_channel dpd_5g_ch_list_bw160[];
 extern const u32 dpd_5g_bw160_ch_num;
 extern const struct ieee80211_channel dpd_6g_ch_list_bw160[];

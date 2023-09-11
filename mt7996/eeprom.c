@@ -18,6 +18,17 @@ const struct ieee80211_channel dpd_2g_ch_list_bw20[] = {
 	CHAN2G(11, 2462)
 };
 
+const struct ieee80211_channel dpd_5g_skip_ch_list[] = {
+	CHAN5G(68, 5340),
+	CHAN5G(72, 5360),
+	CHAN5G(76, 5380),
+	CHAN5G(80, 5400),
+	CHAN5G(84, 5420),
+	CHAN5G(88, 5440),
+	CHAN5G(92, 5460),
+	CHAN5G(96, 5480)
+};
+
 const struct ieee80211_channel dpd_5g_ch_list_bw160[] = {
 	CHAN5G(50, 5250),
 	CHAN5G(114, 5570),
@@ -44,6 +55,7 @@ const struct ieee80211_channel dpd_6g_ch_list_bw320[] = {
 };
 
 const u32 dpd_2g_bw20_ch_num = ARRAY_SIZE(dpd_2g_ch_list_bw20);
+const u32 dpd_5g_skip_ch_num = ARRAY_SIZE(dpd_5g_skip_ch_list);
 const u32 dpd_5g_bw160_ch_num = ARRAY_SIZE(dpd_5g_ch_list_bw160);
 const u32 dpd_6g_bw160_ch_num = ARRAY_SIZE(dpd_6g_ch_list_bw160);
 const u32 dpd_6g_bw320_ch_num = ARRAY_SIZE(dpd_6g_ch_list_bw320);
@@ -138,8 +150,8 @@ mt7996_get_dpd_per_band_size(struct mt7996_dev *dev, enum nl80211_band band)
 	if (band == NL80211_BAND_2GHZ)
 		dpd_size = dpd_2g_bw20_ch_num * DPD_PER_CH_BW20_SIZE;
 	else if (band == NL80211_BAND_5GHZ)
-		dpd_size = mphy->sband_5g.sband.n_channels * DPD_PER_CH_BW20_SIZE +
-			   dpd_5g_bw160_ch_num * DPD_PER_CH_GT_BW20_SIZE;
+		dpd_size = (mphy->sband_5g.sband.n_channels - dpd_5g_skip_ch_num) *
+			   DPD_PER_CH_BW20_SIZE + dpd_5g_bw160_ch_num * DPD_PER_CH_GT_BW20_SIZE;
 	else
 		dpd_size = mphy->sband_6g.sband.n_channels * DPD_PER_CH_BW20_SIZE +
 			   (dpd_6g_bw160_ch_num + dpd_6g_bw320_ch_num) * DPD_PER_CH_GT_BW20_SIZE;
@@ -397,6 +409,39 @@ out:
 	release_firmware(fw);
 
 	return ret;
+}
+
+static void mt7996_eeprom_init_precal(struct mt7996_dev *dev)
+{
+#define MT76_CHANNELS_5GHZ_SIZE		36	/* ARRAY_SIZE(mt76_channels_5ghz) */
+#define MT76_CHANNELS_6GHZ_SIZE		59	/* ARRAY_SIZE(mt76_channels_6ghz) */
+
+	dev->prek.dpd_ch_num[DPD_CH_NUM_BW20_2G] = ARRAY_SIZE(dpd_2g_ch_list_bw20);
+	dev->prek.dpd_ch_num[DPD_CH_NUM_BW20_5G_SKIP] = ARRAY_SIZE(dpd_5g_skip_ch_list);
+	dev->prek.dpd_ch_num[DPD_CH_NUM_BW20_5G] = MT76_CHANNELS_5GHZ_SIZE -
+						   DPD_CH_NUM(BW20_5G_SKIP);
+	dev->prek.dpd_ch_num[DPD_CH_NUM_BW160_5G] = ARRAY_SIZE(dpd_5g_ch_list_bw160);
+	dev->prek.dpd_ch_num[DPD_CH_NUM_BW20_6G] = MT76_CHANNELS_6GHZ_SIZE;
+	dev->prek.dpd_ch_num[DPD_CH_NUM_BW160_6G] = ARRAY_SIZE(dpd_6g_ch_list_bw160);
+
+	switch (mt76_chip(&dev->mt76)) {
+	case 0x7990:
+		dev->prek.rev = mt7996_prek_rev;
+		/* 5g & 6g bw 80 dpd channel list is not used */
+		dev->prek.dpd_ch_num[DPD_CH_NUM_BW320_6G] = ARRAY_SIZE(dpd_6g_ch_list_bw320);
+		break;
+	case 0x7992:
+		dev->prek.rev  = mt7992_prek_rev;
+		dev->prek.dpd_ch_num[DPD_CH_NUM_BW80_5G] = ARRAY_SIZE(dpd_5g_ch_list_bw80);
+		/* 6g is not used in current sku */
+		dev->prek.dpd_ch_num[DPD_CH_NUM_BW20_6G] = 0;
+		dev->prek.dpd_ch_num[DPD_CH_NUM_BW80_6G] = 0;
+		dev->prek.dpd_ch_num[DPD_CH_NUM_BW160_6G] = 0;
+		break;
+	default:
+		dev->prek.rev  = mt7996_prek_rev;
+		break;
+	}
 }
 
 static int mt7996_eeprom_load_precal(struct mt7996_dev *dev)

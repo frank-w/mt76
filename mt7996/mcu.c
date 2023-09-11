@@ -3790,7 +3790,8 @@ int mt7996_mcu_apply_tx_dpd(struct mt7996_phy *phy)
 		chan_list_size = mphy->sband_5g.sband.n_channels;
 		base_offset += dpd_size_2g;
 		if (bw == NL80211_CHAN_WIDTH_160) {
-			base_offset += mphy->sband_5g.sband.n_channels * DPD_PER_CH_BW20_SIZE;
+			base_offset += (mphy->sband_5g.sband.n_channels - dpd_5g_skip_ch_num) *
+				       DPD_PER_CH_BW20_SIZE;
 			per_chan_size = DPD_PER_CH_GT_BW20_SIZE;
 			cal_id = RF_DPD_FLAT_5G_MEM_CAL;
 			chan_list = dpd_5g_ch_list_bw160;
@@ -3799,6 +3800,9 @@ int mt7996_mcu_apply_tx_dpd(struct mt7996_phy *phy)
 			/* apply (center channel - 2)'s dpd cal data for bw 40/80 channels */
 			channel -= 2;
 		}
+		if (channel >= dpd_5g_skip_ch_list[0].hw_value &&
+		    channel <= dpd_5g_skip_ch_list[dpd_5g_skip_ch_num - 1].hw_value)
+			return 0;
 		break;
 	case NL80211_BAND_6GHZ:
 		dpd_mask = MT_EE_WIFI_CAL_DPD_6G;
@@ -3837,6 +3841,10 @@ int mt7996_mcu_apply_tx_dpd(struct mt7996_phy *phy)
 			break;
 	if (idx == chan_list_size)
 		return -EINVAL;
+
+	if (band == NL80211_BAND_5GHZ && bw != NL80211_CHAN_WIDTH_160 &&
+	    channel > dpd_5g_skip_ch_list[dpd_5g_skip_ch_num - 1].hw_value)
+		idx -= dpd_5g_skip_ch_num;
 
 	cal += MT_EE_CAL_GROUP_SIZE + base_offset + idx * per_chan_size;
 
