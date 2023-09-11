@@ -103,6 +103,7 @@ static void mt7996_mac_sta_poll(struct mt7996_dev *dev)
 	};
 	struct ieee80211_sta *sta;
 	struct mt7996_sta *msta;
+	struct mt7996_vow_sta_ctrl *vow;
 	u32 tx_time[IEEE80211_NUM_ACS], rx_time[IEEE80211_NUM_ACS];
 	LIST_HEAD(sta_poll_list);
 	int i;
@@ -161,6 +162,7 @@ static void mt7996_mac_sta_poll(struct mt7996_dev *dev)
 
 		sta = container_of((void *)msta, struct ieee80211_sta,
 				   drv_priv);
+		vow = &msta->vow;
 		for (i = 0; i < IEEE80211_NUM_ACS; i++) {
 			u8 q = mt76_connac_lmac_mapping(i);
 			u32 tx_cur = tx_time[q];
@@ -171,6 +173,10 @@ static void mt7996_mac_sta_poll(struct mt7996_dev *dev)
 				continue;
 
 			ieee80211_sta_register_airtime(sta, tid, tx_cur, rx_cur);
+
+			spin_lock_bh(&vow->lock);
+			vow->tx_airtime += tx_cur;
+			spin_unlock_bh(&vow->lock);
 		}
 
 		/* get signal strength of resp frames (CTS/BA/ACK) */

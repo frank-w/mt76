@@ -895,6 +895,91 @@ DEFINE_DEBUGFS_ATTRIBUTE(fops_fw_debug_muru_disable,
 			 mt7996_fw_debug_muru_disable_get,
 			 mt7996_fw_debug_muru_disable_set, "%lld\n");
 
+static int
+mt7996_vow_info_read(struct seq_file *s, void *data)
+{
+	struct mt7996_dev *dev = dev_get_drvdata(s->private);
+	struct mt7996_vow_ctrl *vow = &dev->vow;
+	int i;
+
+	seq_printf(s, "VoW ATF Configuration:\n");
+	seq_printf(s, "ATF: %s\n", vow->atf_enable ? "enabled" : "disabled");
+	seq_printf(s, "WATF: %s\n", vow->watf_enable ? "enabled" : "disabled");
+	seq_printf(s, "Airtime Quantums (unit: 256 us)\n");
+	for (i = 0; i < VOW_DRR_QUANTUM_NUM; ++i)
+		seq_printf(s, "\tL%d: %hhu\n", i, vow->drr_quantum[i]);
+	seq_printf(s, "Max Airtime Deficit: %hhu (unit: 256 us)\n", vow->max_deficit);
+
+	return 0;
+}
+
+static int
+mt7996_atf_enable_get(void *data, u64 *val)
+{
+	struct mt7996_phy *phy = data;
+
+	*val = phy->dev->vow.atf_enable;
+
+	return 0;
+}
+
+static int
+mt7996_atf_enable_set(void *data, u64 val)
+{
+	struct mt7996_phy *phy = data;
+	struct mt7996_vow_ctrl *vow = &phy->dev->vow;
+	int ret;
+
+	vow->max_deficit = val ? 64 : 1;
+	ret = mt7996_mcu_set_vow_drr_ctrl(phy, NULL, VOW_DRR_CTRL_AIRTIME_DEFICIT_BOUND);
+	if (ret)
+		return ret;
+
+	vow->atf_enable = !!val;
+	return mt7996_mcu_set_vow_feature_ctrl(phy);
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_atf_enable, mt7996_atf_enable_get,
+	                 mt7996_atf_enable_set, "%llu\n");
+
+static int
+mt7996_airtime_read(struct seq_file *s, void *data)
+{
+	struct mt7996_dev *dev = dev_get_drvdata(s->private);
+	struct mt76_dev *mdev = &dev->mt76;
+	struct mt7996_vow_sta_ctrl *vow;
+	struct ieee80211_sta *sta;
+	struct mt7996_sta *msta;
+	struct mt76_wcid *wcid;
+	struct mt76_vif *vif;
+	u64 airtime;
+	u16 i;
+
+	seq_printf(s, "VoW Airtime Information:\n");
+	rcu_read_lock();
+	for (i = 1; i < MT7996_WTBL_STA; ++i) {
+		wcid = rcu_dereference(mdev->wcid[i]);
+		if (!wcid || !wcid->sta)
+			continue;
+
+		msta = container_of(wcid, struct mt7996_sta, wcid);
+		sta = container_of((void *)msta, struct ieee80211_sta, drv_priv);
+		vow = &msta->vow;
+		vif = &msta->vif->mt76;
+
+		spin_lock_bh(&vow->lock);
+		airtime = vow->tx_airtime;
+		vow->tx_airtime = 0;
+		spin_unlock_bh(&vow->lock);
+
+		seq_printf(s, "%pM WCID: %hu BandIdx: %hhu OmacIdx: 0x%hhx\tTxAirtime: %llu\n",
+		           sta->addr, i, vif->band_idx, vif->omac_idx, airtime);
+	}
+	rcu_read_unlock();
+
+	return 0;
+}
+
 int mt7996_init_debugfs(struct mt7996_phy *phy)
 {
 	struct mt7996_dev *dev = phy->dev;
@@ -921,6 +1006,11 @@ int mt7996_init_debugfs(struct mt7996_phy *phy)
 	debugfs_create_devm_seqfile(dev->mt76.dev, "twt_stats", dir,
 				    mt7996_twt_stats);
 	debugfs_create_file("rf_regval", 0600, dir, dev, &fops_rf_regval);
+	debugfs_create_devm_seqfile(dev->mt76.dev, "vow_info", dir,
+	                            mt7996_vow_info_read);
+	debugfs_create_file("atf_enable", 0600, dir, phy, &fops_atf_enable);
+	debugfs_create_devm_seqfile(dev->mt76.dev, "airtime", dir,
+	                            mt7996_airtime_read);
 
 	if (phy->mt76->cap.has_5ghz) {
 		debugfs_create_u32("dfs_hw_pattern", 0400, dir,
