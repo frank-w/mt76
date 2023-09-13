@@ -380,10 +380,10 @@ int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 						    MT_RXQ_RING_BASE(MT7996_RXQ_RRO_BAND2) +
 						    MT7996_RXQ_RRO_BAND2 * MT_RING_SIZE;
 		} else {
-			wed->wlan.wpdma_rx_rro[1] = wed->wlan.phy_base +
+			wed->wlan.wpdma_rx_rro[1] = wed->wlan.phy_base + hif1_ofs +
 						    MT_RXQ_RING_BASE(MT7996_RXQ_RRO_BAND1) +
 						    MT7996_RXQ_RRO_BAND1 * MT_RING_SIZE;
-			wed->wlan.wpdma_rx[1] = wed->wlan.phy_base +
+			wed->wlan.wpdma_rx[1] = wed->wlan.phy_base + hif1_ofs +
 						MT_RXQ_RING_BASE(MT7996_RXQ_BAND1) +
 						MT7996_RXQ_BAND1 * MT_RING_SIZE;
 		}
@@ -521,10 +521,9 @@ void mt7996_dual_hif_set_irq_mask(struct mt7996_dev *dev, bool write_reg,
 		if (mtk_wed_device_active(&mdev->mmio.wed)) {
 			mtk_wed_device_irq_set_mask(&mdev->mmio.wed,
 						    mdev->mmio.irqmask);
-			if (mtk_wed_device_active(&mdev->mmio.wed_hif2)) {
+			if (mtk_wed_device_active(&mdev->mmio.wed_hif2))
 				mtk_wed_device_irq_set_mask(&mdev->mmio.wed_hif2,
 							    mdev->mmio.irqmask);
-			}
 		} else {
 			mt76_wr(dev, MT_INT_MASK_CSR, mdev->mmio.irqmask);
 			mt76_wr(dev, MT_INT1_MASK_CSR, mdev->mmio.irqmask);

@@ -354,6 +354,13 @@ static void mt7996_dma_enable(struct mt7996_dev *dev, bool reset)
 			 MT_WFDMA_HOST_CONFIG_PDMA_BAND |
 			 MT_WFDMA_HOST_CONFIG_BAND2_PCIE1);
 
+		if (mtk_wed_device_active(&dev->mt76.mmio.wed) &&
+		    is_mt7992(&dev->mt76)) {
+			mt76_set(dev, MT_WFDMA_HOST_CONFIG,
+				 MT_WFDMA_HOST_CONFIG_PDMA_BAND |
+				 MT_WFDMA_HOST_CONFIG_BAND1_PCIE1);
+		}
+
 		/* AXI read outstanding number */
 		mt76_rmw(dev, MT_WFDMA_AXI_R2A_CTRL,
 			 MT_WFDMA_AXI_R2A_CTRL_OUTSTAND_MASK, 0x14);
@@ -373,7 +380,8 @@ static void mt7996_dma_enable(struct mt7996_dev *dev, bool reset)
 		    dev->has_rro) {
 			u32 intr = is_mt7996(&dev->mt76) ?
 				   MT_WFDMA0_RX_INT_SEL_RING6 :
-				   MT_WFDMA0_RX_INT_SEL_RING9;
+				   MT_WFDMA0_RX_INT_SEL_RING9 |
+				   MT_WFDMA0_RX_INT_SEL_RING5;
 			mt76_set(dev, MT_WFDMA0_RX_INT_PCIE_SEL + hif1_ofs,
 				 intr);
 		} else {
@@ -629,10 +637,11 @@ int mt7996_dma_init(struct mt7996_dev *dev)
 					       MT_RXQ_ID(MT_RXQ_RRO_BAND1),
 					       MT7996_RX_RING_SIZE,
 					       MT7996_RX_BUF_SIZE,
-					       MT_RXQ_RING_BASE(MT_RXQ_RRO_BAND1));
+					       MT_RXQ_RING_BASE(MT_RXQ_RRO_BAND1) + hif1_ofs);
 			if (ret)
 				return ret;
 		} else {
+			/* tx free notify event from WA for band0 */
 			dev->mt76.q_rx[MT_RXQ_TXFREE_BAND0].flags = MT_WED_Q_TXFREE;
 			dev->mt76.q_rx[MT_RXQ_TXFREE_BAND0].wed = wed;
 

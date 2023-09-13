@@ -536,14 +536,22 @@ mt7996_show_dma_info(struct seq_file *s, struct mt7996_dev *dev)
 		WF_WFDMA_HOST_DMA0_WPDMA_RX_RING4_CTRL0_ADDR);
 	dump_dma_rx_ring_info(s, dev, "R5:Data1(MAC2H)", "Both",
 		WF_WFDMA_HOST_DMA0_WPDMA_RX_RING5_CTRL0_ADDR);
-	dump_dma_rx_ring_info(s, dev, "R6:BUF1(MAC2H)", "Both",
-		WF_WFDMA_HOST_DMA0_WPDMA_RX_RING6_CTRL0_ADDR);
+	if (is_mt7996(&dev->mt76))
+		dump_dma_rx_ring_info(s, dev, "R6:BUF1(MAC2H)", "Both",
+			WF_WFDMA_HOST_DMA0_WPDMA_RX_RING6_CTRL0_ADDR);
+	else
+		dump_dma_rx_ring_info(s, dev, "R6:TxDone0(MAC2H)", "Both",
+			WF_WFDMA_HOST_DMA0_WPDMA_RX_RING6_CTRL0_ADDR);
 	dump_dma_rx_ring_info(s, dev, "R7:TxDone1(MAC2H)", "Both",
 		WF_WFDMA_HOST_DMA0_WPDMA_RX_RING7_CTRL0_ADDR);
 	dump_dma_rx_ring_info(s, dev, "R8:BUF0(MAC2H)", "Both",
 		WF_WFDMA_HOST_DMA0_WPDMA_RX_RING8_CTRL0_ADDR);
-	dump_dma_rx_ring_info(s, dev, "R9:TxDone0(MAC2H)", "Both",
-		WF_WFDMA_HOST_DMA0_WPDMA_RX_RING9_CTRL0_ADDR);
+	if (is_mt7996(&dev->mt76))
+		dump_dma_rx_ring_info(s, dev, "R9:TxDone0(MAC2H)", "Both",
+			WF_WFDMA_HOST_DMA0_WPDMA_RX_RING9_CTRL0_ADDR);
+	else
+		dump_dma_rx_ring_info(s, dev, "R9:BUF0(MAC2H)", "Both",
+			WF_WFDMA_HOST_DMA0_WPDMA_RX_RING9_CTRL0_ADDR);
 	dump_dma_rx_ring_info(s, dev, "R10:MSDU_PG0(MAC2H)", "Both",
 		WF_WFDMA_HOST_DMA0_WPDMA_RX_RING10_CTRL0_ADDR);
 	dump_dma_rx_ring_info(s, dev, "R11:MSDU_PG1(MAC2H)", "Both",
@@ -561,15 +569,18 @@ mt7996_show_dma_info(struct seq_file *s, struct mt7996_dev *dev)
 			WF_WFDMA_HOST_DMA0_PCIE1_WPDMA_TX_RING21_CTRL0_ADDR);
 		dump_dma_tx_ring_info(s, dev, "T22:TXD?(H2WA)", "AP",
 			WF_WFDMA_HOST_DMA0_PCIE1_WPDMA_TX_RING22_CTRL0_ADDR);
-
 		dump_dma_rx_ring_info(s, dev, "R3:TxDone1(WA2H)", "AP",
 			WF_WFDMA_HOST_DMA0_PCIE1_WPDMA_RX_RING3_CTRL0_ADDR);
 		dump_dma_rx_ring_info(s, dev, "R5:Data1(MAC2H)", "Both",
 			WF_WFDMA_HOST_DMA0_PCIE1_WPDMA_RX_RING5_CTRL0_ADDR);
-		dump_dma_rx_ring_info(s, dev, "R6:BUF1(MAC2H)", "Both",
-			WF_WFDMA_HOST_DMA0_PCIE1_WPDMA_RX_RING6_CTRL0_ADDR);
+		if (is_mt7996(&dev->mt76))
+			dump_dma_rx_ring_info(s, dev, "R6:BUF1(MAC2H)", "Both",
+				WF_WFDMA_HOST_DMA0_PCIE1_WPDMA_RX_RING6_CTRL0_ADDR);
 		dump_dma_rx_ring_info(s, dev, "R7:TxDone1(MAC2H)", "Both",
 			WF_WFDMA_HOST_DMA0_PCIE1_WPDMA_RX_RING7_CTRL0_ADDR);
+		if (is_mt7992(&dev->mt76))
+			dump_dma_rx_ring_info(s, dev, "R9:BUF1(MAC2H)", "Both",
+				WF_WFDMA_HOST_DMA0_PCIE1_WPDMA_RX_RING9_CTRL0_ADDR);
 	}
 
 	/* MCU DMA information */
