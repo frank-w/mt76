@@ -102,6 +102,11 @@ rfeature_ctrl_policy[NUM_MTK_VENDOR_ATTRS_RFEATURE_CTRL] = {
 	[MTK_VENDOR_ATTR_RFEATURE_CTRL_TRIG_TXBF] = { .type = NLA_U8 },
 };
 
+static const struct nla_policy
+background_radar_ctrl_policy[NUM_MTK_VENDOR_ATTRS_BACKGROUND_RADAR_CTRL] = {
+	[MTK_VENDOR_ATTR_BACKGROUND_RADAR_CTRL_MODE] = {.type = NLA_U8 },
+};
+
 struct mt7996_amnt_data {
 	u8 idx;
 	u8 addr[ETH_ALEN];
@@ -851,6 +856,27 @@ static int mt7996_vendor_wireless_ctrl(struct wiphy *wiphy,
 	return 0;
 }
 
+static int mt7996_vendor_background_radar_mode_ctrl(struct wiphy *wiphy,
+						    struct wireless_dev *wdev,
+						    const void *data,
+						    int data_len)
+{
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct mt7996_dev *dev = mt7996_hw_dev(hw);
+	struct nlattr *tb[NUM_MTK_VENDOR_ATTRS_BACKGROUND_RADAR_CTRL];
+	int err;
+	u8 background_radar_mode;
+
+	err = nla_parse(tb, MTK_VENDOR_ATTR_BACKGROUND_RADAR_CTRL_MAX, data, data_len,
+			background_radar_ctrl_policy, NULL);
+	if (err)
+		return err;
+
+	background_radar_mode = nla_get_u8(tb[MTK_VENDOR_ATTR_BACKGROUND_RADAR_CTRL_MODE]);
+
+	return mt7996_mcu_rdd_background_disable_timer(dev, !!background_radar_mode);
+}
+
 static const struct wiphy_vendor_command mt7996_vendor_commands[] = {
 	{
 		.info = {
@@ -944,6 +970,17 @@ static const struct wiphy_vendor_command mt7996_vendor_commands[] = {
 		.doit = mt7996_vendor_rfeature_ctrl,
 		.policy = rfeature_ctrl_policy,
 		.maxattr = MTK_VENDOR_ATTR_RFEATURE_CTRL_MAX,
+	},
+	{
+		.info = {
+			.vendor_id = MTK_NL80211_VENDOR_ID,
+			.subcmd = MTK_NL80211_VENDOR_SUBCMD_BACKGROUND_RADAR_CTRL,
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV |
+			WIPHY_VENDOR_CMD_NEED_RUNNING,
+		.doit = mt7996_vendor_background_radar_mode_ctrl,
+		.policy = background_radar_ctrl_policy,
+		.maxattr = MTK_VENDOR_ATTR_BACKGROUND_RADAR_CTRL_MAX,
 	},
 };
 

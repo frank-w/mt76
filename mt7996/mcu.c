@@ -4516,18 +4516,7 @@ int mt7996_mcu_set_radio_en(struct mt7996_phy *phy, bool enable)
 int mt7996_mcu_rdd_cmd(struct mt7996_dev *dev, int cmd, u8 index,
 		       u8 rx_sel, u8 val)
 {
-	struct {
-		u8 _rsv[4];
-
-		__le16 tag;
-		__le16 len;
-
-		u8 ctrl;
-		u8 rdd_idx;
-		u8 rdd_rx_sel;
-		u8 val;
-		u8 rsv[4];
-	} __packed req = {
+	struct mt7996_rdd_ctrl req = {
 		.tag = cpu_to_le16(UNI_RDD_CTRL_PARM),
 		.len = cpu_to_le16(sizeof(req) - 4),
 		.ctrl = cmd,
@@ -4535,6 +4524,37 @@ int mt7996_mcu_rdd_cmd(struct mt7996_dev *dev, int cmd, u8 index,
 		.rdd_rx_sel = rx_sel,
 		.val = val,
 	};
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(RDD_CTRL),
+				 &req, sizeof(req), true);
+}
+
+int mt7996_mcu_rdd_background_disable_timer(struct mt7996_dev *dev, bool disable_timer)
+{
+	struct mt7996_rdd_ctrl req = {
+		.tag = cpu_to_le16(UNI_RDD_CTRL_PARM),
+		.len = cpu_to_le16(sizeof(req) - 4),
+		.ctrl = RDD_DISABLE_ZW_TIMER,
+		.rdd_idx = MT_RX_SEL2,
+		.disable_timer = disable_timer,
+	};
+
+	if (!is_mt7996(&dev->mt76) ||
+	    (mt76_get_field(dev, MT_PAD_GPIO, MT_PAD_GPIO_ADIE_COMB) % 2))
+		return 0;
+
+	switch (dev->mt76.region) {
+	case NL80211_DFS_ETSI:
+		req.val = 0;
+		break;
+	case NL80211_DFS_JP:
+		req.val = 2;
+		break;
+	case NL80211_DFS_FCC:
+	default:
+		req.val = 1;
+		break;
+	}
 
 	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(RDD_CTRL),
 				 &req, sizeof(req), true);

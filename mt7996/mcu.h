@@ -119,6 +119,20 @@ struct mt7996_mcu_rdd_report {
 	} hw_pulse[32];
 } __packed;
 
+struct mt7996_rdd_ctrl {
+	u8 _rsv[4];
+
+	__le16 tag;
+	__le16 len;
+
+	u8 ctrl;
+	u8 rdd_idx;
+	u8 rdd_rx_sel;
+	u8 val;
+	u8 disable_timer;
+	u8 rsv[3];
+} __packed;
+
 struct mt7996_mcu_background_chain_ctrl {
 	u8 _rsv[4];
 

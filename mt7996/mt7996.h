@@ -517,7 +517,10 @@ enum mt7996_rdd_cmd {
 	RDD_READ_PULSE,
 	RDD_RESUME_BF,
 	RDD_IRQ_OFF,
+	RDD_DISABLE_ZW_TIMER,
 };
+
+#define RDD_ZW_TIMER_OFF	BIT(31)
 
 static inline struct mt7996_phy *
 mt7996_hw_phy(struct ieee80211_hw *hw)
@@ -660,6 +663,8 @@ int mt7996_mcu_set_thermal_protect(struct mt7996_phy *phy, bool enable);
 int mt7996_mcu_set_txpower_sku(struct mt7996_phy *phy);
 int mt7996_mcu_rdd_cmd(struct mt7996_dev *dev, int cmd, u8 index,
 		       u8 rx_sel, u8 val);
+int mt7996_mcu_rdd_background_disable_timer(struct mt7996_dev *dev,
+					    bool disable_timer);
 int mt7996_mcu_rdd_background_enable(struct mt7996_phy *phy,
 				     struct cfg80211_chan_def *chandef);
 int mt7996_mcu_set_fixed_rate_table(struct mt7996_phy *phy, u8 table_idx,
