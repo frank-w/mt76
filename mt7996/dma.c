@@ -537,6 +537,10 @@ int mt7996_dma_init(struct mt7996_dev *dev)
 	if (mt7996_band_valid(dev, MT_BAND2)) {
 		/* rx data queue for mt7996 band2 */
 		rx_base = MT_RXQ_RING_BASE(MT_RXQ_BAND2) + hif1_ofs;
+		if (mtk_wed_device_active(wed_hif2) && mtk_wed_get_rx_capa(wed_hif2)) {
+			dev->mt76.q_rx[MT_RXQ_BAND2].flags = MT_WED_Q_RX(0);
+			dev->mt76.q_rx[MT_RXQ_BAND2].wed = wed_hif2;
+		}
 		ret = mt76_queue_alloc(dev, &dev->mt76.q_rx[MT_RXQ_BAND2],
 				       MT_RXQ_ID(MT_RXQ_BAND2),
 				       MT7996_RX_RING_SIZE,

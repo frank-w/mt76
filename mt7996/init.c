@@ -638,10 +638,8 @@ static int mt7996_register_phy(struct mt7996_dev *dev, struct mt7996_phy *phy,
 		goto error;
 
 	if (wed == &dev->mt76.mmio.wed_hif2 && mtk_wed_device_active(wed)) {
-		u32 irq_mask = dev->mt76.mmio.irqmask | MT_INT_TX_DONE_BAND2;
-
-		mt76_wr(dev, MT_INT1_MASK_CSR, irq_mask);
-		mtk_wed_device_start(&dev->mt76.mmio.wed_hif2, irq_mask);
+		mt76_wr(dev, MT_INT_PCIE1_MASK_CSR, MT_INT_TX_RX_DONE_EXT);
+		mtk_wed_device_start(&dev->mt76.mmio.wed_hif2, MT_INT_TX_RX_DONE_EXT);
 	}
 
 	return 0;
