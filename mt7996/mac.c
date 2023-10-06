@@ -1998,7 +1998,7 @@ void mt7996_mac_reset_work(struct work_struct *work)
 
 		mt76_wr(dev, MT_INT_MASK_CSR, wed_irq_mask);
 
-		mtk_wed_device_start_hw_rro(&dev->mt76.mmio.wed, wed_irq_mask,
+		mtk_wed_device_start_hwrro(&dev->mt76.mmio.wed, wed_irq_mask,
 					    true);
 		mt7996_irq_enable(dev, wed_irq_mask);
 		mt7996_irq_disable(dev, 0);

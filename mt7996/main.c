@@ -1601,10 +1601,10 @@ mt7996_net_fill_forward_path(struct ieee80211_hw *hw,
 	path->mtk_wdma.wcid = msta->wcid.idx;
 
 	if (ieee80211_hw_check(hw, SUPPORTS_AMSDU_IN_AMPDU) &&
-	    mtk_wed_is_amsdu_supported(wed))
-		path->mtk_wdma.amsdu = msta->wcid.amsdu;
+	    mtk_wed_device_support_pao(wed))
+		path->mtk_wdma.amsdu_en = msta->wcid.amsdu;
 	else
-		path->mtk_wdma.amsdu = 0;
+		path->mtk_wdma.amsdu_en = 0;
 
 	ctx->dev = NULL;
 

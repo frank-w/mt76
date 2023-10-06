@@ -14,7 +14,7 @@
 #include "../trace.h"
 #include "../dma.h"
 
-static bool wed_enable;
+static bool wed_enable = true;
 module_param(wed_enable, bool, 0644);
 
 static const struct __base mt7996_reg_base[] = {
@@ -352,14 +352,14 @@ int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 		}
 
 		wed->wlan.wpdma_rx_glo = wed->wlan.phy_base + hif1_ofs + MT_WFDMA0_GLO_CFG;
-		wed->wlan.wpdma_rx = wed->wlan.phy_base + hif1_ofs +
+		wed->wlan.wpdma_rx[0] = wed->wlan.phy_base + hif1_ofs +
 				     MT_RXQ_RING_BASE(MT7996_RXQ_BAND0) +
 				     MT7996_RXQ_BAND0 * MT_RING_SIZE;
 
-		wed->wlan.id = 0x7991;
+		wed->wlan.chip_id = 0x7991;
 		wed->wlan.tx_tbit[0] = ffs(MT_INT_TX_DONE_BAND2) - 1;
 	} else {
-		wed->wlan.hw_rro = dev->has_rro; /* default on */
+		wed->wlan.hwrro = dev->has_rro; /* default on */
 		wed->wlan.wpdma_int = wed->wlan.phy_base + MT_INT_SOURCE_CSR;
 		wed->wlan.wpdma_mask = wed->wlan.phy_base + MT_INT_MASK_CSR;
 		wed->wlan.wpdma_tx = wed->wlan.phy_base + MT_TXQ_RING_BASE(0) +
@@ -367,7 +367,7 @@ int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 
 		wed->wlan.wpdma_rx_glo = wed->wlan.phy_base + MT_WFDMA0_GLO_CFG;
 
-		wed->wlan.wpdma_rx = wed->wlan.phy_base +
+		wed->wlan.wpdma_rx[0] = wed->wlan.phy_base +
 				     MT_RXQ_RING_BASE(MT7996_RXQ_BAND0) +
 				     MT7996_RXQ_BAND0 * MT_RING_SIZE;
 
@@ -409,11 +409,11 @@ int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 		dev->mt76.rx_token_size = MT7996_TOKEN_SIZE + wed->wlan.rx_npkt;
 	}
 
-	wed->wlan.nbuf = MT7996_HW_TOKEN_SIZE;
-	wed->wlan.token_start = MT7996_TOKEN_SIZE - wed->wlan.nbuf;
+	wed->wlan.nbuf = MT7996_TOKEN_SIZE;
+	wed->wlan.token_start = 0;
 
-	wed->wlan.amsdu_max_subframes = 8;
-	wed->wlan.amsdu_max_len = 1536;
+	wed->wlan.max_amsdu_nums = 8;
+	wed->wlan.max_amsdu_len = 1536;
 
 	wed->wlan.init_buf = mt7996_wed_init_buf;
 	wed->wlan.init_rx_buf = mt76_mmio_wed_init_rx_buf;
@@ -430,6 +430,8 @@ int mt7996_mmio_wed_init(struct mt7996_dev *dev, void *pdev_ptr,
 
 	*irq = wed->irq;
 	dev->mt76.dma_dev = wed->dev;
+
+	dev->mt76.token_size = MT7996_SW_TOKEN_SIZE;
 
 	return 1;
 #else

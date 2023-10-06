@@ -431,7 +431,7 @@ int mt7996_dma_rro_init(struct mt7996_dev *dev)
 	irq_mask = mdev->mmio.irqmask | MT_INT_RRO_RX_DONE |
 		   MT_INT_TX_DONE_BAND2;
 	mt76_wr(dev, MT_INT_MASK_CSR, irq_mask);
-	mtk_wed_device_start_hw_rro(&mdev->mmio.wed, irq_mask, false);
+	mtk_wed_device_start_hwrro(&mdev->mmio.wed, irq_mask, false);
 	mt7996_irq_enable(dev, irq_mask);
 
 	return 0;

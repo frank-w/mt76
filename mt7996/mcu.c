@@ -3262,7 +3262,7 @@ static int mt7996_mcu_wa_red_config(struct mt7996_dev *dev)
 
 	if (!mtk_wed_device_active(&dev->mt76.mmio.wed))
 		req.token_per_src[RED_TOKEN_SRC_CNT - 1] =
-			cpu_to_le16(MT7996_TOKEN_SIZE - MT7996_HW_TOKEN_SIZE);
+			cpu_to_le16(MT7996_SW_TOKEN_SIZE);
 
 	return mt76_mcu_send_msg(&dev->mt76, MCU_WA_PARAM_CMD(SET),
 				 &req, sizeof(req), false);

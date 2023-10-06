@@ -134,7 +134,7 @@ EXPORT_SYMBOL_GPL(mt76_mmio_wed_release_rx_buf);
 u32 mt76_mmio_wed_init_rx_buf(struct mtk_wed_device *wed, int size)
 {
 	struct mt76_dev *dev = container_of(wed, struct mt76_dev, mmio.wed);
-	struct mtk_wed_bm_desc *desc = wed->rx_buf_ring.desc;
+	struct mtk_rxbm_desc *desc = wed->rx_buf_ring.desc;
 	u32 length;
 	int i;
 
