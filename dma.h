@@ -85,7 +85,7 @@ void mt76_dma_wed_reset(struct mt76_dev *dev);
 static inline void
 mt76_dma_reset_tx_queue(struct mt76_dev *dev, struct mt76_queue *q)
 {
-	dev->queue_ops->reset_q(dev, q);
+	dev->queue_ops->reset_q(dev, q, true);
 	if (mtk_wed_device_active(&dev->mmio.wed))
 		mt76_dma_wed_setup(dev, q, true);
 }
