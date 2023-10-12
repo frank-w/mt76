@@ -29,10 +29,37 @@ const struct ieee80211_channel dpd_5g_skip_ch_list[] = {
 	CHAN5G(96, 5480)
 };
 
+const struct ieee80211_channel dpd_5g_ch_list_bw80[] = {
+	CHAN5G(42, 5210),
+	CHAN5G(58, 5290),
+	CHAN5G(106, 5530),
+	CHAN5G(122, 5610),
+	CHAN5G(138, 5690),
+	CHAN5G(155, 5775),
+	CHAN5G(171, 5855)
+};
+
 const struct ieee80211_channel dpd_5g_ch_list_bw160[] = {
 	CHAN5G(50, 5250),
 	CHAN5G(114, 5570),
 	CHAN5G(163, 5815)
+};
+
+const struct ieee80211_channel dpd_6g_ch_list_bw80[] = {
+	CHAN6G(7, 5985),
+	CHAN6G(23, 6065),
+	CHAN6G(39, 6145),
+	CHAN6G(55, 6225),
+	CHAN6G(71, 6305),
+	CHAN6G(87, 6385),
+	CHAN6G(103, 6465),
+	CHAN6G(119, 6545),
+	CHAN6G(135, 6625),
+	CHAN6G(151, 6705),
+	CHAN6G(167, 6785),
+	CHAN6G(183, 6865),
+	CHAN6G(199, 6945),
+	CHAN6G(215, 7025)
 };
 
 const struct ieee80211_channel dpd_6g_ch_list_bw160[] = {
@@ -53,12 +80,6 @@ const struct ieee80211_channel dpd_6g_ch_list_bw320[] = {
 	CHAN6G(159, 6745),
 	CHAN6G(191, 6905)
 };
-
-const u32 dpd_2g_bw20_ch_num = ARRAY_SIZE(dpd_2g_ch_list_bw20);
-const u32 dpd_5g_skip_ch_num = ARRAY_SIZE(dpd_5g_skip_ch_list);
-const u32 dpd_5g_bw160_ch_num = ARRAY_SIZE(dpd_5g_ch_list_bw160);
-const u32 dpd_6g_bw160_ch_num = ARRAY_SIZE(dpd_6g_ch_list_bw160);
-const u32 dpd_6g_bw320_ch_num = ARRAY_SIZE(dpd_6g_ch_list_bw320);
 
 static int mt7996_check_eeprom(struct mt7996_dev *dev)
 {
@@ -127,36 +148,6 @@ const char *mt7996_eeprom_name(struct mt7996_dev *dev)
 	default:
 		return MT7996_EEPROM_DEFAULT;
 	}
-}
-
-int
-mt7996_get_dpd_per_band_size(struct mt7996_dev *dev, enum nl80211_band band)
-{
-	/* handle different sku */
-	static const u8 band_to_idx[] = {
-		[NL80211_BAND_2GHZ] = MT_BAND0,
-		[NL80211_BAND_5GHZ] = MT_BAND1,
-		[NL80211_BAND_6GHZ] = MT_BAND2,
-	};
-	struct mt7996_phy *phy = __mt7996_phy(dev, band_to_idx[band]);
-	struct mt76_phy *mphy;
-	int dpd_size;
-
-	if (!phy)
-		return 0;
-
-	mphy = phy->mt76;
-
-	if (band == NL80211_BAND_2GHZ)
-		dpd_size = dpd_2g_bw20_ch_num * DPD_PER_CH_BW20_SIZE;
-	else if (band == NL80211_BAND_5GHZ)
-		dpd_size = (mphy->sband_5g.sband.n_channels - dpd_5g_skip_ch_num) *
-			   DPD_PER_CH_BW20_SIZE + dpd_5g_bw160_ch_num * DPD_PER_CH_GT_BW20_SIZE;
-	else
-		dpd_size = mphy->sband_6g.sband.n_channels * DPD_PER_CH_BW20_SIZE +
-			   (dpd_6g_bw160_ch_num + dpd_6g_bw320_ch_num) * DPD_PER_CH_GT_BW20_SIZE;
-
-	return dpd_size;
 }
 
 static int

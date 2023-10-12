@@ -195,6 +195,19 @@ struct mt7996_twt_flow {
 
 DECLARE_EWMA(avg_signal, 10, 8)
 
+enum mt7996_dpd_ch_num {
+	DPD_CH_NUM_BW20_2G,
+	DPD_CH_NUM_BW20_5G,
+	DPD_CH_NUM_BW20_5G_SKIP,
+	DPD_CH_NUM_BW80_5G,
+	DPD_CH_NUM_BW160_5G,
+	DPD_CH_NUM_BW20_6G,
+	DPD_CH_NUM_BW80_6G,
+	DPD_CH_NUM_BW160_6G,
+	DPD_CH_NUM_BW320_6G,
+	DPD_CH_NUM_TYPE_MAX,
+};
+
 struct mt7996_sta {
 	struct mt76_wcid wcid; /* must be first */
 
@@ -457,6 +470,10 @@ struct mt7996_dev {
 
 	void *cal;
 	u32 cur_prek_offset;
+	struct {
+		const u32 *rev;
+		u8 dpd_ch_num[DPD_CH_NUM_TYPE_MAX];
+	} prek;
 
 	struct {
 		u16 table_mask;
@@ -593,7 +610,6 @@ int mt7996_eeprom_parse_hw_cap(struct mt7996_dev *dev, struct mt7996_phy *phy);
 int mt7996_eeprom_get_target_power(struct mt7996_dev *dev,
 				   struct ieee80211_channel *chan);
 s8 mt7996_eeprom_get_power_delta(struct mt7996_dev *dev, int band);
-int mt7996_get_dpd_per_band_size(struct mt7996_dev *dev, enum nl80211_band band);
 int mt7996_dma_init(struct mt7996_dev *dev);
 void mt7996_dma_reset(struct mt7996_dev *dev, bool force);
 void mt7996_dma_prefetch(struct mt7996_dev *dev);

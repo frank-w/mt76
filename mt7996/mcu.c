@@ -3759,13 +3759,11 @@ int mt7996_mcu_apply_tx_dpd(struct mt7996_phy *phy)
 	enum nl80211_chan_width bw = chandef->width;
 	const struct ieee80211_channel *chan_list;
 	u32 cal_id, chan_list_size, base_offset = 0, offs = MT_EE_DO_PRE_CAL;
-	u32 dpd_size_2g, dpd_size_5g, per_chan_size = DPD_PER_CH_BW20_SIZE;
+	u32 per_chan_size = DPD_PER_CH_BW20_SIZE;
 	u16 channel = ieee80211_frequency_to_channel(chandef->center_freq1);
 	u8 dpd_mask, *cal = dev->cal, *eeprom = dev->mt76.eeprom.data;
 	int idx, i, ret;
-
-	dpd_size_2g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_2GHZ);
-	dpd_size_5g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_5GHZ);
+	bool has_skip_ch = (band == NL80211_BAND_5GHZ);
 
 	switch (band) {
 	case NL80211_BAND_2GHZ:
@@ -3781,27 +3779,35 @@ int mt7996_mcu_apply_tx_dpd(struct mt7996_phy *phy)
 			return 0;
 		cal_id = RF_DPD_FLAT_CAL;
 		chan_list = dpd_2g_ch_list_bw20;
-		chan_list_size = dpd_2g_bw20_ch_num;
+		chan_list_size = DPD_CH_NUM(BW20_2G);
 		break;
 	case NL80211_BAND_5GHZ:
 		dpd_mask = MT_EE_WIFI_CAL_DPD_5G;
 		cal_id = RF_DPD_FLAT_5G_CAL;
 		chan_list = mphy->sband_5g.sband.channels;
 		chan_list_size = mphy->sband_5g.sband.n_channels;
-		base_offset += dpd_size_2g;
+		base_offset += MT_EE_CAL_DPD_SIZE_2G;
 		if (bw == NL80211_CHAN_WIDTH_160) {
-			base_offset += (mphy->sband_5g.sband.n_channels - dpd_5g_skip_ch_num) *
-				       DPD_PER_CH_BW20_SIZE;
+			base_offset += DPD_CH_NUM(BW20_5G) * DPD_PER_CH_BW20_SIZE +
+				       DPD_CH_NUM(BW80_5G) * DPD_PER_CH_GT_BW20_SIZE;
 			per_chan_size = DPD_PER_CH_GT_BW20_SIZE;
 			cal_id = RF_DPD_FLAT_5G_MEM_CAL;
 			chan_list = dpd_5g_ch_list_bw160;
-			chan_list_size = dpd_5g_bw160_ch_num;
+			chan_list_size = DPD_CH_NUM(BW160_5G);
+			has_skip_ch = false;
+		} else if (is_mt7992(&dev->mt76) && bw == NL80211_CHAN_WIDTH_80) {
+			base_offset += DPD_CH_NUM(BW20_5G) * DPD_PER_CH_BW20_SIZE;
+			per_chan_size = DPD_PER_CH_GT_BW20_SIZE;
+			cal_id = RF_DPD_FLAT_5G_MEM_CAL;
+			chan_list = dpd_5g_ch_list_bw80;
+			chan_list_size = DPD_CH_NUM(BW80_5G);
+			has_skip_ch = false;
 		} else if (bw > NL80211_CHAN_WIDTH_20) {
 			/* apply (center channel - 2)'s dpd cal data for bw 40/80 channels */
 			channel -= 2;
 		}
 		if (channel >= dpd_5g_skip_ch_list[0].hw_value &&
-		    channel <= dpd_5g_skip_ch_list[dpd_5g_skip_ch_num - 1].hw_value)
+		    channel <= dpd_5g_skip_ch_list[DPD_CH_NUM(BW20_5G_SKIP) - 1].hw_value)
 			return 0;
 		break;
 	case NL80211_BAND_6GHZ:
@@ -3809,20 +3815,27 @@ int mt7996_mcu_apply_tx_dpd(struct mt7996_phy *phy)
 		cal_id = RF_DPD_FLAT_6G_CAL;
 		chan_list = mphy->sband_6g.sband.channels;
 		chan_list_size = mphy->sband_6g.sband.n_channels;
-		base_offset += dpd_size_2g + dpd_size_5g;
+		base_offset += MT_EE_CAL_DPD_SIZE_2G + MT_EE_CAL_DPD_SIZE_5G;
 		if (bw == NL80211_CHAN_WIDTH_160) {
 			base_offset += mphy->sband_6g.sband.n_channels * DPD_PER_CH_BW20_SIZE;
 			per_chan_size = DPD_PER_CH_GT_BW20_SIZE;
 			cal_id = RF_DPD_FLAT_6G_MEM_CAL;
 			chan_list = dpd_6g_ch_list_bw160;
-			chan_list_size = dpd_6g_bw160_ch_num;
-		} else if (bw == NL80211_CHAN_WIDTH_320) {
+			chan_list_size = DPD_CH_NUM(BW160_6G);
+		} else if (is_mt7996(&dev->mt76) && bw == NL80211_CHAN_WIDTH_320) {
 			base_offset += mphy->sband_6g.sband.n_channels * DPD_PER_CH_BW20_SIZE +
-				       dpd_6g_bw160_ch_num * DPD_PER_CH_GT_BW20_SIZE;
+				       DPD_CH_NUM(BW80_6G) * DPD_PER_CH_GT_BW20_SIZE +
+				       DPD_CH_NUM(BW160_6G) * DPD_PER_CH_GT_BW20_SIZE;
 			per_chan_size = DPD_PER_CH_GT_BW20_SIZE;
 			cal_id = RF_DPD_FLAT_6G_MEM_CAL;
 			chan_list = dpd_6g_ch_list_bw320;
-			chan_list_size = dpd_6g_bw320_ch_num;
+			chan_list_size = DPD_CH_NUM(BW320_6G);
+		} else if (is_mt7992(&dev->mt76) && bw == NL80211_CHAN_WIDTH_80) {
+			base_offset += mphy->sband_6g.sband.n_channels * DPD_PER_CH_BW20_SIZE;
+			per_chan_size = DPD_PER_CH_GT_BW20_SIZE;
+			cal_id = RF_DPD_FLAT_6G_MEM_CAL;
+			chan_list = dpd_6g_ch_list_bw80;
+			chan_list_size = DPD_CH_NUM(BW80_6G);
 		} else if (bw > NL80211_CHAN_WIDTH_20) {
 			/* apply (center channel - 2)'s dpd cal data for bw 40/80 channels */
 			channel -= 2;
@@ -3842,9 +3855,8 @@ int mt7996_mcu_apply_tx_dpd(struct mt7996_phy *phy)
 	if (idx == chan_list_size)
 		return -EINVAL;
 
-	if (band == NL80211_BAND_5GHZ && bw != NL80211_CHAN_WIDTH_160 &&
-	    channel > dpd_5g_skip_ch_list[dpd_5g_skip_ch_num - 1].hw_value)
-		idx -= dpd_5g_skip_ch_num;
+	if (has_skip_ch && channel > dpd_5g_skip_ch_list[DPD_CH_NUM(BW20_5G_SKIP) - 1].hw_value)
+		idx -= DPD_CH_NUM(BW20_5G_SKIP);
 
 	cal += MT_EE_CAL_GROUP_SIZE + base_offset + idx * per_chan_size;
 

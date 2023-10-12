@@ -45,36 +45,69 @@ enum mt7996_eeprom_field {
 #define MT_EE_WIFI_CAL_DPD			GENMASK(5, 3)
 
 #define MT_EE_CAL_UNIT				1024
-#define MT_EE_CAL_GROUP_SIZE_2G			(4 * MT_EE_CAL_UNIT)
-#define MT_EE_CAL_GROUP_SIZE_5G			(45 * MT_EE_CAL_UNIT)
-#define MT_EE_CAL_GROUP_SIZE_6G			(125 * MT_EE_CAL_UNIT)
-#define MT_EE_CAL_ADCDCOC_SIZE_2G		(4 * 4)
-#define MT_EE_CAL_ADCDCOC_SIZE_5G		(4 * 4)
-#define MT_EE_CAL_ADCDCOC_SIZE_6G		(4 * 5)
-#define MT_EE_CAL_GROUP_SIZE			(MT_EE_CAL_GROUP_SIZE_2G + \
-						 MT_EE_CAL_GROUP_SIZE_5G + \
-						 MT_EE_CAL_GROUP_SIZE_6G + \
-						 MT_EE_CAL_ADCDCOC_SIZE_2G + \
-						 MT_EE_CAL_ADCDCOC_SIZE_5G + \
-						 MT_EE_CAL_ADCDCOC_SIZE_6G)
 
-#define DPD_PER_CH_LEGACY_SIZE			(4 * MT_EE_CAL_UNIT)
-#define DPD_PER_CH_MEM_SIZE			(13 * MT_EE_CAL_UNIT)
-#define DPD_PER_CH_OTFG0_SIZE			(2 * MT_EE_CAL_UNIT)
-#define DPD_PER_CH_BW20_SIZE			(DPD_PER_CH_LEGACY_SIZE + DPD_PER_CH_OTFG0_SIZE)
-#define DPD_PER_CH_GT_BW20_SIZE			(DPD_PER_CH_MEM_SIZE + DPD_PER_CH_OTFG0_SIZE)
-#define MT_EE_CAL_DPD_SIZE			(780 * MT_EE_CAL_UNIT)
+enum mt7996_prek_rev {
+	GROUP_SIZE_2G,
+	GROUP_SIZE_5G,
+	GROUP_SIZE_6G,
+	ADCDCOC_SIZE_2G,
+	ADCDCOC_SIZE_5G,
+	ADCDCOC_SIZE_6G,
+	DPD_LEGACY_SIZE,
+	DPD_MEM_SIZE,
+	DPD_OTFG0_SIZE,
+};
+
+static const u32 mt7996_prek_rev[] = {
+	[GROUP_SIZE_2G] =			4 * MT_EE_CAL_UNIT,
+	[GROUP_SIZE_5G] =			45 * MT_EE_CAL_UNIT,
+	[GROUP_SIZE_6G] =			125 * MT_EE_CAL_UNIT,
+	[ADCDCOC_SIZE_2G] =			4 * 4,
+	[ADCDCOC_SIZE_5G] =			4 * 4,
+	[ADCDCOC_SIZE_6G] =			4 * 5,
+	[DPD_LEGACY_SIZE] =			4 * MT_EE_CAL_UNIT,
+	[DPD_MEM_SIZE] =			13 * MT_EE_CAL_UNIT,
+	[DPD_OTFG0_SIZE] =			2 * MT_EE_CAL_UNIT,
+};
+
+/* kite 2/5g config */
+static const u32 mt7992_prek_rev[] = {
+	[GROUP_SIZE_2G] =			4 * MT_EE_CAL_UNIT,
+	[GROUP_SIZE_5G] =			110 * MT_EE_CAL_UNIT,
+	[GROUP_SIZE_6G] =			0,
+	[ADCDCOC_SIZE_2G] =			4 * 4,
+	[ADCDCOC_SIZE_5G] =			4 * 5,
+	[ADCDCOC_SIZE_6G] =			0,
+	[DPD_LEGACY_SIZE] =			5 * MT_EE_CAL_UNIT,
+	[DPD_MEM_SIZE] =			16 * MT_EE_CAL_UNIT,
+	[DPD_OTFG0_SIZE] =			2 * MT_EE_CAL_UNIT,
+};
 
 extern const struct ieee80211_channel dpd_2g_ch_list_bw20[];
-extern const u32 dpd_2g_bw20_ch_num;
 extern const struct ieee80211_channel dpd_5g_skip_ch_list[];
-extern const u32 dpd_5g_skip_ch_num;
+extern const struct ieee80211_channel dpd_5g_ch_list_bw80[];
 extern const struct ieee80211_channel dpd_5g_ch_list_bw160[];
-extern const u32 dpd_5g_bw160_ch_num;
+extern const struct ieee80211_channel dpd_6g_ch_list_bw80[];
 extern const struct ieee80211_channel dpd_6g_ch_list_bw160[];
-extern const u32 dpd_6g_bw160_ch_num;
 extern const struct ieee80211_channel dpd_6g_ch_list_bw320[];
-extern const u32 dpd_6g_bw320_ch_num;
+
+#define PREK(id)				(dev->prek.rev[(id)])
+#define DPD_CH_NUM(_type)			(dev->prek.dpd_ch_num[DPD_CH_NUM_##_type])
+#define MT_EE_CAL_GROUP_SIZE			(PREK(GROUP_SIZE_2G) + PREK(GROUP_SIZE_5G) + \
+						 PREK(GROUP_SIZE_6G) + PREK(ADCDCOC_SIZE_2G) + \
+						 PREK(ADCDCOC_SIZE_5G) + PREK(ADCDCOC_SIZE_6G))
+#define DPD_PER_CH_BW20_SIZE			(PREK(DPD_LEGACY_SIZE) + PREK(DPD_OTFG0_SIZE))
+#define DPD_PER_CH_GT_BW20_SIZE			(PREK(DPD_MEM_SIZE) + PREK(DPD_OTFG0_SIZE))
+#define MT_EE_CAL_DPD_SIZE_2G			(DPD_CH_NUM(BW20_2G) * DPD_PER_CH_BW20_SIZE)
+#define MT_EE_CAL_DPD_SIZE_5G			(DPD_CH_NUM(BW20_5G) * DPD_PER_CH_BW20_SIZE + \
+						 DPD_CH_NUM(BW80_5G) * DPD_PER_CH_GT_BW20_SIZE + \
+						 DPD_CH_NUM(BW160_5G) * DPD_PER_CH_GT_BW20_SIZE)
+#define MT_EE_CAL_DPD_SIZE_6G			(DPD_CH_NUM(BW20_6G) * DPD_PER_CH_BW20_SIZE + \
+						 DPD_CH_NUM(BW80_6G) * DPD_PER_CH_GT_BW20_SIZE + \
+						 DPD_CH_NUM(BW160_6G) * DPD_PER_CH_GT_BW20_SIZE + \
+						 DPD_CH_NUM(BW320_6G) * DPD_PER_CH_GT_BW20_SIZE)
+#define MT_EE_CAL_DPD_SIZE			(MT_EE_CAL_DPD_SIZE_2G + MT_EE_CAL_DPD_SIZE_5G + \
+						 MT_EE_CAL_DPD_SIZE_6G)
 
 #define RF_DPD_FLAT_CAL				BIT(28)
 #define RF_PRE_CAL				BIT(29)

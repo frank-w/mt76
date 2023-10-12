@@ -37,6 +37,11 @@ const struct nla_policy mt76_tm_policy[NUM_MT76_TM_ATTRS] = {
 };
 EXPORT_SYMBOL_GPL(mt76_tm_policy);
 
+static inline bool mt76_testmode_offload(struct mt76_dev *dev)
+{
+	return is_mt7996(dev) || is_mt7992(dev);
+}
+
 void mt76_testmode_tx_pending(struct mt76_phy *phy)
 {
 	struct mt76_testmode_data *td = &phy->test;
@@ -197,7 +202,7 @@ mt76_testmode_tx_init(struct mt76_phy *phy)
 	u8 max_nss = hweight8(phy->antenna_mask);
 	int ret;
 
-	if (is_mt7996(phy->dev))
+	if (mt76_testmode_offload(phy->dev))
 		return 0;
 
 	ret = mt76_testmode_alloc_skb(phy, td->tx_mpdu_len);
@@ -293,7 +298,7 @@ mt76_testmode_tx_start(struct mt76_phy *phy)
 	td->tx_done = 0;
 	td->tx_pending = td->tx_count;
 
-	if (!is_mt7996(dev))
+	if (!mt76_testmode_offload(dev))
 		mt76_worker_schedule(&dev->tx_worker);
 }
 
@@ -303,7 +308,7 @@ mt76_testmode_tx_stop(struct mt76_phy *phy)
 	struct mt76_testmode_data *td = &phy->test;
 	struct mt76_dev *dev = phy->dev;
 
-	if (is_mt7996(dev) && dev->test_ops->tx_stop) {
+	if (mt76_testmode_offload(dev) && dev->test_ops->tx_stop) {
 		dev->test_ops->tx_stop(phy);
 		return;
 	}

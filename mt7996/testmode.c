@@ -434,7 +434,7 @@ mt7996_tm_set_tx_cont(struct mt7996_phy *phy, bool en)
 static int
 mt7996_tm_group_prek(struct mt7996_phy *phy, enum mt76_testmode_state state)
 {
-	u8 *eeprom;
+	u8 *eeprom, do_precal;
 	u32 i, group_size, dpd_size, size, offs, *pre_cal;
 	int ret = 0;
 	struct mt7996_dev *dev = phy->dev;
@@ -462,6 +462,9 @@ mt7996_tm_group_prek(struct mt7996_phy *phy, enum mt76_testmode_state state)
 	dpd_size = MT_EE_CAL_DPD_SIZE;
 	size = group_size + dpd_size;
 	offs = MT_EE_DO_PRE_CAL;
+	do_precal = (MT_EE_WIFI_CAL_GROUP_2G * !!PREK(GROUP_SIZE_2G)) |
+		    (MT_EE_WIFI_CAL_GROUP_5G * !!PREK(GROUP_SIZE_5G)) |
+		    (MT_EE_WIFI_CAL_GROUP_6G * !!PREK(GROUP_SIZE_6G));
 
 	switch (state) {
 	case MT76_TM_STATE_GROUP_PREK:
@@ -476,13 +479,10 @@ mt7996_tm_group_prek(struct mt7996_phy *phy, enum mt76_testmode_state state)
 		wait_event_timeout(mdev->mcu.wait, dev->cur_prek_offset == group_size,
 				   30 * HZ);
 
-		if (ret) {
+		if (ret)
 			dev_err(dev->mt76.dev, "Group Pre-cal: mcu send msg failed!\n");
-			return ret;
-		}
-
-		if (!ret)
-			eeprom[offs] |= MT_EE_WIFI_CAL_GROUP;
+		else
+			eeprom[offs] |= do_precal;
 		break;
 	case MT76_TM_STATE_GROUP_PREK_DUMP:
 		pre_cal = (u32 *)dev->cal;
@@ -520,10 +520,12 @@ mt7996_tm_dpd_prek_send_req(struct mt7996_phy *phy, struct mt7996_tm_req *req,
 	struct mt76_phy *mphy = phy->mt76;
 	struct cfg80211_chan_def chandef_backup, *chandef = &mphy->chandef;
 	struct ieee80211_channel chan_backup;
-	int i, ret;
+	int i, ret, skip_ch_num = DPD_CH_NUM(BW20_5G_SKIP);
 
 	if (!chan_list)
 		return -EOPNOTSUPP;
+	if (!channel_size)
+		return 0;
 
 	req->rf_test.op.rf.param.cal_param.func_data = cpu_to_le32(func_data);
 
@@ -533,7 +535,7 @@ mt7996_tm_dpd_prek_send_req(struct mt7996_phy *phy, struct mt7996_tm_req *req,
 	for (i = 0; i < channel_size; i++) {
 		if (chan_list[i].band == NL80211_BAND_5GHZ &&
 		    chan_list[i].hw_value >= dpd_5g_skip_ch_list[0].hw_value &&
-		    chan_list[i].hw_value <= dpd_5g_skip_ch_list[dpd_5g_skip_ch_num - 1].hw_value)
+		    chan_list[i].hw_value <= dpd_5g_skip_ch_list[skip_ch_num - 1].hw_value)
 			continue;
 
 		memcpy(chandef->chan, &chan_list[i], sizeof(struct ieee80211_channel));
@@ -602,11 +604,11 @@ mt7996_tm_dpd_prek(struct mt7996_phy *phy, enum mt76_testmode_state state)
 	switch (state) {
 	case MT76_TM_STATE_DPD_2G:
 		ret = mt7996_tm_dpd_prek_send_req(phy, &req, dpd_2g_ch_list_bw20,
-						  dpd_2g_bw20_ch_num,
+						  DPD_CH_NUM(BW20_2G),
 						  NL80211_CHAN_WIDTH_20, RF_DPD_FLAT_CAL);
-		wait_on_prek_offset += dpd_2g_bw20_ch_num * DPD_PER_CH_BW20_SIZE;
-		wait_event_timeout(mdev->mcu.wait,
-				   dev->cur_prek_offset == wait_on_prek_offset, 30 * HZ);
+		wait_on_prek_offset += DPD_CH_NUM(BW20_2G) * DPD_PER_CH_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait, dev->cur_prek_offset == wait_on_prek_offset,
+				   30 * HZ);
 
 		do_precal = MT_EE_WIFI_CAL_DPD_2G;
 		break;
@@ -617,18 +619,27 @@ mt7996_tm_dpd_prek(struct mt7996_phy *phy, enum mt76_testmode_state state)
 						  NL80211_CHAN_WIDTH_20, RF_DPD_FLAT_5G_CAL);
 		if (ret)
 			return ret;
-		wait_on_prek_offset += (mphy->sband_5g.sband.n_channels - dpd_5g_skip_ch_num) *
-				       DPD_PER_CH_BW20_SIZE;
-		wait_event_timeout(mdev->mcu.wait,
-				   dev->cur_prek_offset == wait_on_prek_offset, 30 * HZ);
+		wait_on_prek_offset += DPD_CH_NUM(BW20_5G) * DPD_PER_CH_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait, dev->cur_prek_offset == wait_on_prek_offset,
+				   30 * HZ);
+
+		/* 5g channel bw80 calibration */
+		ret = mt7996_tm_dpd_prek_send_req(phy, &req, dpd_5g_ch_list_bw80,
+						  DPD_CH_NUM(BW80_5G),
+						  NL80211_CHAN_WIDTH_80, RF_DPD_FLAT_5G_MEM_CAL);
+		if (ret)
+			return ret;
+		wait_on_prek_offset += DPD_CH_NUM(BW80_5G) * DPD_PER_CH_GT_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait, dev->cur_prek_offset == wait_on_prek_offset,
+				   30 * HZ);
 
 		/* 5g channel bw160 calibration */
 		ret = mt7996_tm_dpd_prek_send_req(phy, &req, dpd_5g_ch_list_bw160,
-						  dpd_5g_bw160_ch_num,
+						  DPD_CH_NUM(BW160_5G),
 						  NL80211_CHAN_WIDTH_160, RF_DPD_FLAT_5G_MEM_CAL);
-		wait_on_prek_offset += dpd_5g_bw160_ch_num * DPD_PER_CH_GT_BW20_SIZE;
-		wait_event_timeout(mdev->mcu.wait,
-				   dev->cur_prek_offset == wait_on_prek_offset, 30 * HZ);
+		wait_on_prek_offset += DPD_CH_NUM(BW160_5G) * DPD_PER_CH_GT_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait, dev->cur_prek_offset == wait_on_prek_offset,
+				   30 * HZ);
 
 		do_precal = MT_EE_WIFI_CAL_DPD_5G;
 		break;
@@ -639,27 +650,37 @@ mt7996_tm_dpd_prek(struct mt7996_phy *phy, enum mt76_testmode_state state)
 						  NL80211_CHAN_WIDTH_20, RF_DPD_FLAT_6G_CAL);
 		if (ret)
 			return ret;
-		wait_on_prek_offset += mphy->sband_6g.sband.n_channels * DPD_PER_CH_BW20_SIZE;
-		wait_event_timeout(mdev->mcu.wait,
-				   dev->cur_prek_offset == wait_on_prek_offset, 30 * HZ);
+		wait_on_prek_offset += DPD_CH_NUM(BW20_6G) * DPD_PER_CH_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait, dev->cur_prek_offset == wait_on_prek_offset,
+				   30 * HZ);
+
+		/* 6g channel bw80 calibration */
+		ret = mt7996_tm_dpd_prek_send_req(phy, &req, dpd_6g_ch_list_bw80,
+						  DPD_CH_NUM(BW80_6G),
+						  NL80211_CHAN_WIDTH_80, RF_DPD_FLAT_6G_MEM_CAL);
+		if (ret)
+			return ret;
+		wait_on_prek_offset += DPD_CH_NUM(BW80_6G) * DPD_PER_CH_GT_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait, dev->cur_prek_offset == wait_on_prek_offset,
+				   30 * HZ);
 
 		/* 6g channel bw160 calibration */
 		ret = mt7996_tm_dpd_prek_send_req(phy, &req, dpd_6g_ch_list_bw160,
-						  dpd_6g_bw160_ch_num,
+						  DPD_CH_NUM(BW160_6G),
 						  NL80211_CHAN_WIDTH_160, RF_DPD_FLAT_6G_MEM_CAL);
 		if (ret)
 			return ret;
-		wait_on_prek_offset += dpd_6g_bw160_ch_num * DPD_PER_CH_GT_BW20_SIZE;
-		wait_event_timeout(mdev->mcu.wait,
-				   dev->cur_prek_offset == wait_on_prek_offset, 30 * HZ);
+		wait_on_prek_offset += DPD_CH_NUM(BW160_6G) * DPD_PER_CH_GT_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait, dev->cur_prek_offset == wait_on_prek_offset,
+				   30 * HZ);
 
 		/* 6g channel bw320 calibration */
 		ret = mt7996_tm_dpd_prek_send_req(phy, &req, dpd_6g_ch_list_bw320,
-						  dpd_6g_bw320_ch_num,
+						  DPD_CH_NUM(BW320_6G),
 						  NL80211_CHAN_WIDTH_320, RF_DPD_FLAT_6G_MEM_CAL);
-		wait_on_prek_offset += dpd_6g_bw320_ch_num * DPD_PER_CH_GT_BW20_SIZE;
-		wait_event_timeout(mdev->mcu.wait,
-				   dev->cur_prek_offset == wait_on_prek_offset, 30 * HZ);
+		wait_on_prek_offset += DPD_CH_NUM(BW320_6G) * DPD_PER_CH_GT_BW20_SIZE;
+		wait_event_timeout(mdev->mcu.wait, dev->cur_prek_offset == wait_on_prek_offset,
+				   30 * HZ);
 
 		do_precal = MT_EE_WIFI_CAL_DPD_6G;
 		break;
@@ -732,9 +753,9 @@ mt7996_tm_dump_precal(struct mt76_phy *mphy, struct sk_buff *msg, int flag, int 
 	eeprom = dev->mt76.eeprom.data;
 	offs = MT_EE_DO_PRE_CAL;
 
-	dpd_size_2g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_2GHZ);
-	dpd_size_5g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_5GHZ);
-	dpd_size_6g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_6GHZ);
+	dpd_size_2g = MT_EE_CAL_DPD_SIZE_2G;
+	dpd_size_5g = MT_EE_CAL_DPD_SIZE_5G;
+	dpd_size_6g = MT_EE_CAL_DPD_SIZE_6G;
 
 	switch (type) {
 	case PREK_SYNC_ALL:
@@ -810,9 +831,9 @@ mt7996_tm_re_cal_event(struct mt7996_dev *dev, struct mt7996_tm_rf_test_result *
 	u8 *pre_cal;
 
 	pre_cal = dev->cal;
-	dpd_size_2g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_2GHZ);
-	dpd_size_5g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_5GHZ);
-	dpd_size_6g = mt7996_get_dpd_per_band_size(dev, NL80211_BAND_6GHZ);
+	dpd_size_2g = MT_EE_CAL_DPD_SIZE_2G;
+	dpd_size_5g = MT_EE_CAL_DPD_SIZE_5G;
+	dpd_size_6g = MT_EE_CAL_DPD_SIZE_6G;
 
 	cal_idx = le32_to_cpu(data->cal_idx);
 	cal_type = le32_to_cpu(data->cal_type);
