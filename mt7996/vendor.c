@@ -61,6 +61,11 @@ edcca_dump_policy[NUM_MTK_VENDOR_ATTRS_EDCCA_DUMP] = {
 };
 
 static const struct nla_policy
+three_wire_ctrl_policy[NUM_MTK_VENDOR_ATTRS_3WIRE_CTRL] = {
+	[MTK_VENDOR_ATTR_3WIRE_CTRL_MODE] = {.type = NLA_U8 },
+};
+
+static const struct nla_policy
 ibf_ctrl_policy[NUM_MTK_VENDOR_ATTRS_IBF_CTRL] = {
 	[MTK_VENDOR_ATTR_IBF_CTRL_ENABLE] = { .type = NLA_U8 },
 };
@@ -561,6 +566,39 @@ mt7996_vendor_edcca_ctrl_dump(struct wiphy *wiphy, struct wireless_dev *wdev,
 	return EDCCA_MAX_BW_NUM;
 }
 
+static int mt7996_vendor_3wire_ctrl(struct wiphy *wiphy, struct wireless_dev *wdev,
+				    const void *data, int data_len)
+{
+#define UNI_3WIRE_EXT_EN	0
+	struct ieee80211_hw *hw = wiphy_to_ieee80211_hw(wiphy);
+	struct mt7996_dev *dev = mt7996_hw_dev(hw);
+	struct nlattr *tb[NUM_MTK_VENDOR_ATTRS_3WIRE_CTRL];
+	struct {
+		u8 __rsv1[4];
+
+		__le16 tag;
+		__le16 len;
+		u8 three_wire_mode;
+	} __packed req = {
+		.tag = cpu_to_le16(UNI_3WIRE_EXT_EN),
+		.len = cpu_to_le16(sizeof(req) - 4),
+	};
+	int err;
+
+	err = nla_parse(tb, MTK_VENDOR_ATTR_3WIRE_CTRL_MAX, data, data_len,
+			three_wire_ctrl_policy, NULL);
+	if (err)
+		return err;
+
+	if (!tb[MTK_VENDOR_ATTR_3WIRE_CTRL_MODE])
+		return -EINVAL;
+
+	req.three_wire_mode = nla_get_u8(tb[MTK_VENDOR_ATTR_3WIRE_CTRL_MODE]);
+
+	return mt76_mcu_send_msg(&dev->mt76, MCU_WM_UNI_CMD(PTA_3WIRE_CTRL), &req,
+				 sizeof(req), false);
+}
+
 static int mt7996_vendor_ibf_ctrl(struct wiphy *wiphy,
 				  struct wireless_dev *wdev,
 				  const void *data,
@@ -656,6 +694,17 @@ static const struct wiphy_vendor_command mt7996_vendor_commands[] = {
 		.dumpit = mt7996_vendor_edcca_ctrl_dump,
 		.policy = edcca_ctrl_policy,
 		.maxattr = MTK_VENDOR_ATTR_EDCCA_CTRL_MAX,
+	},
+	{
+		.info = {
+			.vendor_id = MTK_NL80211_VENDOR_ID,
+			.subcmd = MTK_NL80211_VENDOR_SUBCMD_3WIRE_CTRL,
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_NETDEV |
+			 WIPHY_VENDOR_CMD_NEED_RUNNING,
+		.doit = mt7996_vendor_3wire_ctrl,
+		.policy = three_wire_ctrl_policy,
+		.maxattr = MTK_VENDOR_ATTR_3WIRE_CTRL_MAX,
 	},
 	{
 		.info = {
