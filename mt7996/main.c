@@ -1063,8 +1063,15 @@ static void mt7996_sta_rc_update(struct ieee80211_hw *hw,
 				 struct ieee80211_sta *sta,
 				 u32 changed)
 {
+	struct mt7996_sta *msta = (struct mt7996_sta *)sta->drv_priv;
 	struct mt7996_phy *phy = mt7996_hw_phy(hw);
 	struct mt7996_dev *dev = phy->dev;
+
+	if (!msta->vif) {
+		dev_warn(dev->mt76.dev, "Un-initialized STA %pM wcid %d in rc_work\n",
+			 sta->addr, msta->wcid.idx);
+		return;
+	}
 
 	mt7996_sta_rc_work(&changed, sta);
 	ieee80211_queue_work(hw, &dev->rc_work);
