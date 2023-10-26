@@ -537,6 +537,9 @@ static inline void __mt7996_stat_to_netdev(struct mt76_phy *mphy,
 				   drv_priv);
 		wdev = ieee80211_vif_to_wdev(vif);
 
+		if (vif->type == NL80211_IFTYPE_MONITOR)
+			return;
+
 		dev_sw_netstats_tx_add(wdev->netdev, tx_packets, tx_bytes);
 		dev_sw_netstats_rx_add(wdev->netdev, rx_packets, rx_bytes);
 	}
