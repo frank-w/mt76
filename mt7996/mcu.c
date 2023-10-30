@@ -3852,6 +3852,8 @@ int mt7996_mcu_set_ser(struct mt7996_dev *dev, u8 action, u8 val, u8 band)
 	};
 
 	switch (action) {
+	case UNI_CMD_SER_QUERY:
+		break;
 	case UNI_CMD_SER_SET:
 		req.set.mask = cpu_to_le32(val);
 		break;
