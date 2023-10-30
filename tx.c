@@ -345,6 +345,14 @@ mt76_tx(struct mt76_phy *phy, struct ieee80211_sta *sta,
 
 	info->hw_queue |= FIELD_PREP(MT_TX_HW_QUEUE_PHY, phy->band_idx);
 
+	if (!wcid->tx_pending.prev || !wcid->tx_pending.next) {
+		dev_warn(phy->dev->dev, "Un-initialized STA %pM wcid %d in mt76_tx\n",
+			 sta->addr, wcid->idx);
+
+		ieee80211_free_txskb(phy->hw, skb);
+		return;
+	}
+
 	spin_lock_bh(&wcid->tx_pending.lock);
 	__skb_queue_tail(&wcid->tx_pending, skb);
 	spin_unlock_bh(&wcid->tx_pending.lock);
