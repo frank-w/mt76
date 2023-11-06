@@ -4,6 +4,7 @@
  */
 
 #include "mt76.h"
+#include "mt76_connac.h"
 #include <linux/moduleparam.h>
 
 struct sk_buff *
@@ -74,35 +75,59 @@ int mt76_mcu_skb_send_and_get_msg(struct mt76_dev *dev, struct sk_buff *skb,
 				  int cmd, bool wait_resp,
 				  struct sk_buff **ret_skb)
 {
+#define MT76_MSG_MAX_RETRY_CNT 3
 	unsigned long expires;
-	int ret, seq;
+	int ret, seq, retry_cnt;
+	struct sk_buff *skb_tmp;
+	bool retry = wait_resp && is_mt7996(dev);
 
 	if (ret_skb)
 		*ret_skb = NULL;
 
 	mutex_lock(&dev->mcu.mutex);
+	retry_cnt = retry ? MT76_MSG_MAX_RETRY_CNT : 1;
+	while (retry_cnt) {
+		skb_tmp = mt76_mcu_msg_alloc(dev, skb->data, skb->len);
+		if (!skb_tmp)
+			goto out;
 
-	ret = dev->mcu_ops->mcu_skb_send_msg(dev, skb, cmd, &seq);
-	if (ret < 0)
-		goto out;
+		if (retry && retry_cnt < MT76_MSG_MAX_RETRY_CNT) {
+			if (test_bit(MT76_MCU_RESET, &dev->phy.state))
+				usleep_range(200000, 500000);
+			dev_err(dev->dev, "send message %08x timeout, try again.\n", cmd);
+		}
 
-	if (!wait_resp) {
-		ret = 0;
-		goto out;
+		ret = dev->mcu_ops->mcu_skb_send_msg(dev, skb_tmp, cmd, &seq);
+		if (ret < 0 && ret != -EAGAIN)
+			goto out;
+
+		if (!wait_resp) {
+			ret = 0;
+			goto out;
+		}
+
+		expires = jiffies + dev->mcu.timeout;
+
+		do {
+			skb_tmp = mt76_mcu_get_response(dev, expires);
+			ret = dev->mcu_ops->mcu_parse_response(dev, cmd, skb_tmp, seq);
+			if (ret == -ETIMEDOUT)
+				break;
+
+			if (!ret && ret_skb)
+				*ret_skb = skb_tmp;
+			else
+				dev_kfree_skb(skb_tmp);
+
+			if (ret != -EAGAIN)
+				goto out;
+		} while (ret == -EAGAIN);
+
+		retry_cnt--;
 	}
 
-	expires = jiffies + dev->mcu.timeout;
-
-	do {
-		skb = mt76_mcu_get_response(dev, expires);
-		ret = dev->mcu_ops->mcu_parse_response(dev, cmd, skb, seq);
-		if (!ret && ret_skb)
-			*ret_skb = skb;
-		else
-			dev_kfree_skb(skb);
-	} while (ret == -EAGAIN);
-
 out:
+	dev_kfree_skb(skb);
 	mutex_unlock(&dev->mcu.mutex);
 
 	return ret;

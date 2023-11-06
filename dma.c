@@ -506,9 +506,12 @@ mt76_dma_tx_queue_skb_raw(struct mt76_dev *dev, struct mt76_queue *q,
 {
 	struct mt76_queue_buf buf = {};
 	dma_addr_t addr;
+	int ret = -ENOMEM;
 
-	if (test_bit(MT76_MCU_RESET, &dev->phy.state))
+	if (test_bit(MT76_MCU_RESET, &dev->phy.state)) {
+		ret = -EAGAIN;
 		goto error;
+	}
 
 	if (q->queued + 1 >= q->ndesc - 1)
 		goto error;
@@ -530,7 +533,7 @@ mt76_dma_tx_queue_skb_raw(struct mt76_dev *dev, struct mt76_queue *q,
 
 error:
 	dev_kfree_skb(skb);
-	return -ENOMEM;
+	return ret;
 }
 
 static int
