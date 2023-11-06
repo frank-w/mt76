@@ -2158,6 +2158,9 @@ void mt7996_coredump(struct mt7996_dev *dev, u8 state)
 
 void mt7996_reset(struct mt7996_dev *dev)
 {
+	dev_info(dev->mt76.dev, "%s SER recovery state: 0x%08x\n",
+		 wiphy_name(dev->mt76.hw->wiphy), READ_ONCE(dev->recovery.state));
+
 	if (!dev->recovery.hw_init_done)
 		return;
 
