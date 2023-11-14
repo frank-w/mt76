@@ -753,6 +753,8 @@ static void
 mt7996_mac_write_txwi_80211(struct mt7996_dev *dev, __le32 *txwi,
 			    struct sk_buff *skb, struct ieee80211_key_conf *key)
 {
+	struct mt76_phy *mphy =
+		mt76_dev_phy(&dev->mt76, le32_get_bits(txwi[1], MT_TXD1_TGID));
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 	struct ieee80211_mgmt *mgmt = (struct ieee80211_mgmt *)skb->data;
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
@@ -761,6 +763,14 @@ mt7996_mac_write_txwi_80211(struct mt7996_dev *dev, __le32 *txwi,
 	__le16 fc = hdr->frame_control;
 	u8 fc_type, fc_stype;
 	u32 val;
+
+	if (ieee80211_is_cert_mode(mphy->hw) && ieee80211_is_deauth(fc)) {
+		/* In WPA3 cert TC-4.8.1, the deauth must be transmitted without
+		 * considering PSM bit
+		 */
+		txwi[0] &= ~cpu_to_le32(MT_TXD0_Q_IDX);
+		txwi[0] |= cpu_to_le32(FIELD_PREP(MT_TXD0_Q_IDX, MT_LMAC_ALTX0));
+	}
 
 	if (ieee80211_is_action(fc) &&
 	    mgmt->u.action.category == WLAN_CATEGORY_BACK &&
