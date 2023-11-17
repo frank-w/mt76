@@ -947,12 +947,11 @@ mt7996_airtime_read(struct seq_file *s, void *data)
 {
 	struct mt7996_dev *dev = dev_get_drvdata(s->private);
 	struct mt76_dev *mdev = &dev->mt76;
-	struct mt7996_vow_sta_ctrl *vow;
+	struct mt76_sta_stats *stats;
 	struct ieee80211_sta *sta;
 	struct mt7996_sta *msta;
 	struct mt76_wcid *wcid;
 	struct mt76_vif *vif;
-	u64 airtime;
 	u16 i;
 
 	seq_printf(s, "VoW Airtime Information:\n");
@@ -964,16 +963,16 @@ mt7996_airtime_read(struct seq_file *s, void *data)
 
 		msta = container_of(wcid, struct mt7996_sta, wcid);
 		sta = container_of((void *)msta, struct ieee80211_sta, drv_priv);
-		vow = &msta->vow;
 		vif = &msta->vif->mt76;
+		stats = &wcid->stats;
 
-		spin_lock_bh(&vow->lock);
-		airtime = vow->tx_airtime;
-		vow->tx_airtime = 0;
-		spin_unlock_bh(&vow->lock);
+		seq_printf(s, "%pM WCID: %hu BandIdx: %hhu OmacIdx: 0x%hhx\t"
+		              "TxAirtime: %llu\tRxAirtime: %llu\n",
+		              sta->addr, i, vif->band_idx, vif->omac_idx,
+		              stats->tx_airtime, stats->rx_airtime);
 
-		seq_printf(s, "%pM WCID: %hu BandIdx: %hhu OmacIdx: 0x%hhx\tTxAirtime: %llu\n",
-		           sta->addr, i, vif->band_idx, vif->omac_idx, airtime);
+		stats->tx_airtime = 0;
+		stats->rx_airtime = 0;
 	}
 	rcu_read_unlock();
 

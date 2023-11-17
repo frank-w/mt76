@@ -12,8 +12,6 @@
 #include "mcu.h"
 #include "vendor.h"
 
-#define to_rssi(field, rcpi)	((FIELD_GET(field, rcpi) - 220) / 2)
-
 static const struct mt7996_dfs_radar_spec etsi_radar_specs = {
 	.pulse_th = { 110, -10, -80, 40, 5200, 128, 5200 },
 	.radar_pattern = {
@@ -91,110 +89,6 @@ u32 mt7996_mac_wtbl_lmac_addr(struct mt7996_dev *dev, u16 wcid, u8 dw)
 		FIELD_PREP(MT_WTBLON_TOP_WDUCR_GROUP, (wcid >> 7)));
 
 	return MT_WTBL_LMAC_OFFS(wcid, dw);
-}
-
-static void mt7996_mac_sta_poll(struct mt7996_dev *dev)
-{
-	static const u8 ac_to_tid[] = {
-		[IEEE80211_AC_BE] = 0,
-		[IEEE80211_AC_BK] = 1,
-		[IEEE80211_AC_VI] = 4,
-		[IEEE80211_AC_VO] = 6
-	};
-	struct ieee80211_sta *sta;
-	struct mt7996_sta *msta;
-	struct mt7996_vow_sta_ctrl *vow;
-	u32 tx_time[IEEE80211_NUM_ACS], rx_time[IEEE80211_NUM_ACS];
-	LIST_HEAD(sta_poll_list);
-	int i;
-
-	spin_lock_bh(&dev->mt76.sta_poll_lock);
-	list_splice_init(&dev->mt76.sta_poll_list, &sta_poll_list);
-	spin_unlock_bh(&dev->mt76.sta_poll_lock);
-
-	rcu_read_lock();
-
-	while (true) {
-		bool clear = false;
-		u32 addr, val;
-		u16 idx;
-		s8 rssi[4];
-
-		spin_lock_bh(&dev->mt76.sta_poll_lock);
-		if (list_empty(&sta_poll_list)) {
-			spin_unlock_bh(&dev->mt76.sta_poll_lock);
-			break;
-		}
-		msta = list_first_entry(&sta_poll_list,
-					struct mt7996_sta, wcid.poll_list);
-		list_del_init(&msta->wcid.poll_list);
-		spin_unlock_bh(&dev->mt76.sta_poll_lock);
-
-		idx = msta->wcid.idx;
-
-		/* refresh peer's airtime reporting */
-		addr = mt7996_mac_wtbl_lmac_addr(dev, idx, 20);
-
-		for (i = 0; i < IEEE80211_NUM_ACS; i++) {
-			u32 tx_last = msta->airtime_ac[i];
-			u32 rx_last = msta->airtime_ac[i + 4];
-
-			msta->airtime_ac[i] = mt76_rr(dev, addr);
-			msta->airtime_ac[i + 4] = mt76_rr(dev, addr + 4);
-
-			tx_time[i] = msta->airtime_ac[i] - tx_last;
-			rx_time[i] = msta->airtime_ac[i + 4] - rx_last;
-
-			if ((tx_last | rx_last) & BIT(30))
-				clear = true;
-
-			addr += 8;
-		}
-
-		if (clear) {
-			mt7996_mac_wtbl_update(dev, idx,
-					       MT_WTBL_UPDATE_ADM_COUNT_CLEAR);
-			memset(msta->airtime_ac, 0, sizeof(msta->airtime_ac));
-		}
-
-		if (!msta->wcid.sta)
-			continue;
-
-		sta = container_of((void *)msta, struct ieee80211_sta,
-				   drv_priv);
-		vow = &msta->vow;
-		for (i = 0; i < IEEE80211_NUM_ACS; i++) {
-			u8 q = mt76_connac_lmac_mapping(i);
-			u32 tx_cur = tx_time[q];
-			u32 rx_cur = rx_time[q];
-			u8 tid = ac_to_tid[i];
-
-			if (!tx_cur && !rx_cur)
-				continue;
-
-			ieee80211_sta_register_airtime(sta, tid, tx_cur, rx_cur);
-
-			spin_lock_bh(&vow->lock);
-			vow->tx_airtime += tx_cur;
-			spin_unlock_bh(&vow->lock);
-		}
-
-		/* get signal strength of resp frames (CTS/BA/ACK) */
-		addr = mt7996_mac_wtbl_lmac_addr(dev, idx, 34);
-		val = mt76_rr(dev, addr);
-
-		rssi[0] = to_rssi(GENMASK(7, 0), val);
-		rssi[1] = to_rssi(GENMASK(15, 8), val);
-		rssi[2] = to_rssi(GENMASK(23, 16), val);
-		rssi[3] = to_rssi(GENMASK(31, 14), val);
-
-		msta->ack_signal =
-			mt76_rx_signal(msta->vif->phy->mt76->antenna_mask, rssi);
-
-		ewma_avg_signal_add(&msta->avg_ack_signal, -msta->ack_signal);
-	}
-
-	rcu_read_unlock();
 }
 
 void mt7996_mac_enable_rtscts(struct mt7996_dev *dev,
@@ -1205,8 +1099,6 @@ mt7996_mac_tx_free(struct mt7996_dev *dev, void *data, int len)
 			mt7996_txwi_free(dev, txwi, sta, &free_list);
 		}
 	}
-
-	mt7996_mac_sta_poll(dev);
 
 	if (wake)
 		mt76_set_tx_blocked(&dev->mt76, false);
@@ -2369,31 +2261,42 @@ void mt7996_mac_sta_rc_work(struct work_struct *work)
 
 void mt7996_mac_work(struct work_struct *work)
 {
-	struct mt7996_phy *phy;
-	struct mt76_phy *mphy;
+	struct mt76_phy *mphy = (struct mt76_phy *)container_of(work, struct mt76_phy,
+	                                                        mac_work.work);
+	struct mt7996_phy *phy = mphy->priv;
+	struct mt76_dev *mdev = mphy->dev;
 
-	mphy = (struct mt76_phy *)container_of(work, struct mt76_phy,
-					       mac_work.work);
-	phy = mphy->priv;
-
-	mutex_lock(&mphy->dev->mutex);
+	mutex_lock(&mdev->mutex);
 
 	mt76_update_survey(mphy);
 	if (++mphy->mac_work_count == 5) {
+		int i;
+
 		mphy->mac_work_count = 0;
 
 		mt7996_mac_update_stats(phy);
 
-		mt7996_mcu_get_all_sta_info(phy, UNI_ALL_STA_TXRX_RATE);
-		if (mtk_wed_device_active(&phy->dev->mt76.mmio.wed)) {
-			mt7996_mcu_get_all_sta_info(phy, UNI_ALL_STA_TXRX_ADM_STAT);
-			mt7996_mcu_get_all_sta_info(phy, UNI_ALL_STA_TXRX_MSDU_COUNT);
+		/* Update DEV-wise information only in
+		 * the MAC work of the first band running.
+		 */
+		for (i = MT_BAND0; i <= mphy->band_idx; ++i) {
+			if (i == mphy->band_idx) {
+				mt7996_mcu_get_all_sta_info(mdev, UNI_ALL_STA_TXRX_RATE);
+				mt7996_mcu_get_all_sta_info(mdev, UNI_ALL_STA_TXRX_AIRTIME);
+				mt7996_mcu_get_rssi(mdev);
+				if (mtk_wed_device_active(&mdev->mmio.wed)) {
+					mt7996_mcu_get_all_sta_info(mdev, UNI_ALL_STA_TXRX_ADM_STAT);
+					mt7996_mcu_get_all_sta_info(mdev, UNI_ALL_STA_TXRX_MSDU_COUNT);
+				}
+			} else if (mt7996_band_valid(phy->dev, i) &&
+			           test_bit(MT76_STATE_RUNNING, &mdev->phys[i]->state))
+				break;
 		}
 	}
 
-	mutex_unlock(&mphy->dev->mutex);
+	mutex_unlock(&mdev->mutex);
 
-	mt76_tx_status_check(mphy->dev, false);
+	mt76_tx_status_check(mdev, false);
 
 	ieee80211_queue_delayed_work(mphy->hw, &mphy->mac_work,
 				     MT7996_WATCHDOG_TIME);

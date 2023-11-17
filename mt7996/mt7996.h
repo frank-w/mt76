@@ -126,6 +126,8 @@
 #define MT7996_RRO_MSDU_PG_CR_CNT 8
 #define MT7996_RRO_MSDU_PG_SIZE_PER_CR 0x10000
 
+#define to_rssi(field, rcpi)	((FIELD_GET(field, rcpi) - 220) / 2)
+
 struct mt7996_vif;
 struct mt7996_sta;
 struct mt7996_dfs_pulse;
@@ -298,8 +300,6 @@ struct mt7996_vow_sta_ctrl {
 	bool paused;
 	u8 bss_grp_idx;
 	u8 drr_quantum[IEEE80211_NUM_ACS];
-	u64 tx_airtime;
-	spinlock_t lock;
 };
 
 struct mt7996_sta {
@@ -308,7 +308,6 @@ struct mt7996_sta {
 	struct mt7996_vif *vif;
 
 	struct list_head rc_list;
-	u32 airtime_ac[8];
 
 	int ack_signal;
 	struct ewma_avg_signal avg_ack_signal;
@@ -404,6 +403,21 @@ struct mt7996_air_monitor_ctrl {
 	struct mt7996_air_monitor_entry entry[MT7996_AIR_MONITOR_MAX_ENTRY];
 };
 #endif
+
+struct mt7996_rro_ba_session {
+	u32 ack_sn         :12;
+	u32 win_sz         :3;
+	u32 bn             :1;
+	u32 last_in_sn     :12;
+	u32 bc             :1;
+	u32 bd             :1;
+	u32 sat            :1;
+	u32 cn             :1;
+	u32 within_cnt     :12;
+	u32 to_sel         :3;
+	u32 rsv            :1;
+	u32 last_in_rxtime :12;
+};
 
 struct mt7996_phy {
 	struct mt76_phy *mt76;
@@ -594,6 +608,7 @@ struct mt7996_dev {
 		u32 fw_dbg_module;
 		u8 fw_dbg_lv;
 		u32 bcn_total_cnt[__MT_MAX_BAND];
+		u32 sid;
 	} dbg;
 	const struct mt7996_dbg_reg_desc *dbg_reg;
 #endif
@@ -819,7 +834,10 @@ int mt7996_mcu_fw_dbg_ctrl(struct mt7996_dev *dev, u32 module, u8 level);
 int mt7996_mcu_trigger_assert(struct mt7996_dev *dev);
 void mt7996_mcu_rx_event(struct mt7996_dev *dev, struct sk_buff *skb);
 void mt7996_mcu_exit(struct mt7996_dev *dev);
-int mt7996_mcu_get_all_sta_info(struct mt7996_phy *phy, u16 tag);
+int mt7996_mcu_get_per_sta_info(struct mt76_dev *dev, u16 tag,
+	                        u16 sta_num, u16 *sta_list);
+int mt7996_mcu_get_rssi(struct mt76_dev *dev);
+int mt7996_mcu_get_all_sta_info(struct mt76_dev *dev, u16 tag);
 int mt7996_mcu_wed_rro_reset_sessions(struct mt7996_dev *dev, u16 id);
 int mt7996_mcu_set_tx_power_ctrl(struct mt7996_phy *phy, u8 power_ctrl_id, u8 data);
 int mt7996_mcu_get_tx_power_info(struct mt7996_phy *phy, u8 category, void *event);

@@ -3047,6 +3047,69 @@ mt7996_vow_drr_dbg(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_vow_drr_dbg, NULL,
 			 mt7996_vow_drr_dbg, "%lld\n");
 
+static int
+mt7996_rro_session_read(struct seq_file *s, void *data)
+{
+	struct mt7996_dev *dev = dev_get_drvdata(s->private);
+	struct mt7996_rro_ba_session *tbl;
+	u32 value[2];
+
+	mt76_wr(dev, MT_RRO_DBG_RD_CTRL, MT_RRO_DBG_RD_EXEC +
+		(dev->dbg.sid >> 1) + 0x200);
+
+	if (dev->dbg.sid & 0x1) {
+		value[0] = mt76_rr(dev, MT_RRO_DBG_RDAT_DW(2));
+		value[1] = mt76_rr(dev, MT_RRO_DBG_RDAT_DW(3));
+	} else {
+		value[0] = mt76_rr(dev, MT_RRO_DBG_RDAT_DW(0));
+		value[1] = mt76_rr(dev, MT_RRO_DBG_RDAT_DW(1));
+	}
+
+	tbl = (struct mt7996_rro_ba_session *)&value[0];
+
+	seq_printf(s, " seid %d:\nba session table DW0:%08x DW2:%08x\n",
+		   dev->dbg.sid, value[0], value[1]);
+
+	seq_printf(s, "ack_sn = 0x%x, last_in_sn = 0x%x, sat/bn/bc/bd/cn = %d/%d/%d/%d/%d\n",
+		   tbl->ack_sn, tbl->last_in_sn, tbl->sat, tbl->bn, tbl->bc, tbl->bd, tbl->cn);
+
+	seq_printf(s, "within_cnt = %d, to_sel = %d, last_in_rxtime = %d\n",
+		   tbl->within_cnt, tbl->to_sel, tbl->last_in_rxtime);
+
+	return 0;
+}
+
+static int
+mt7996_show_rro_mib(struct seq_file *s, void *data)
+{
+	struct mt7996_dev *dev = dev_get_drvdata(s->private);
+	u32 reg[12];
+
+	seq_printf(s, "RRO mib Info:\n");
+
+	reg[0] = mt76_rr(dev, WF_RRO_TOP_STATISTIC(0));
+	reg[1] = mt76_rr(dev, WF_RRO_TOP_STATISTIC(1));
+	reg[2] = mt76_rr(dev, WF_RRO_TOP_STATISTIC(2));
+	reg[3] = mt76_rr(dev, WF_RRO_TOP_STATISTIC(3));
+	reg[4] = mt76_rr(dev, WF_RRO_TOP_STATISTIC(4));
+	reg[5] = mt76_rr(dev, WF_RRO_TOP_STATISTIC(5));
+	reg[6] = mt76_rr(dev, WF_RRO_TOP_STATISTIC(6));
+	reg[7] = mt76_rr(dev, WF_RRO_TOP_STATISTIC(7));
+	reg[8] = mt76_rr(dev, WF_RRO_TOP_STATISTIC(8));
+	reg[9] = mt76_rr(dev, WF_RRO_TOP_STATISTIC(9));
+	reg[10] = mt76_rr(dev, WF_RRO_TOP_STATISTIC(10));
+	reg[11] = mt76_rr(dev, WF_RRO_TOP_STATISTIC(11));
+
+	seq_printf(s, "STEP_ONE/WITHIN/SURPASS = %x/%x/%x\n", reg[0], reg[3], reg[4]);
+	seq_printf(s, "REPEAT/OLDPKT/BAR = %x/%x/%x\n", reg[1], reg[2], reg[5]);
+	seq_printf(s, "SURPASS with big gap = %x\n", reg[6]);
+	seq_printf(s, "DISCONNECT/INVALID = %x/%x\n", reg[7], reg[8]);
+	seq_printf(s, "TO(Step one)/TO(flush all) = %x/%x\n", reg[9], reg[10]);
+	seq_printf(s, "buf ran out = %x\n", reg[11]);
+
+	return 0;
+}
+
 int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 {
 	struct mt7996_dev *dev = phy->dev;
@@ -3145,6 +3208,14 @@ int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir)
 	debugfs_create_file("pfmu_tag_read", 0600, dir, phy, &fops_bf_pfmu_tag_read);
 
 	debugfs_create_file("muru_prot_thr", 0200, dir, phy, &fops_muru_prot_thr);
+
+	if (dev->has_rro) {
+		debugfs_create_u32("rro_sid", 0600, dir, &dev->dbg.sid);
+		debugfs_create_devm_seqfile(dev->mt76.dev, "rro_sid_info", dir,
+					    mt7996_rro_session_read);
+		debugfs_create_devm_seqfile(dev->mt76.dev, "rro_mib", dir,
+					    mt7996_show_rro_mib);
+	}
 
 	return 0;
 }

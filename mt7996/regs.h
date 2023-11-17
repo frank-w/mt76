@@ -122,6 +122,8 @@ enum offs_rev {
 #define MT_MCU_INT_EVENT_DMA_INIT		BIT(1)
 #define MT_MCU_INT_EVENT_RESET_DONE		BIT(3)
 
+#define WF_RRO_TOP_STATISTIC(_n)		MT_RRO_TOP(0x180 + _n * 0x4)
+
 /* PLE */
 #define MT_PLE_BASE				0x820c0000
 #define MT_PLE(ofs)				(MT_PLE_BASE + (ofs))
