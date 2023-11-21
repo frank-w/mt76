@@ -392,6 +392,8 @@ struct mt7996_dev {
 	wait_queue_head_t reset_wait;
 	struct {
 		u32 state;
+		u32 l1_reset;
+		u32 l1_reset_last;
 		u32 wa_reset_count;
 		u32 wm_reset_count;
 		bool hw_full_reset:1;

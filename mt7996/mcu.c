@@ -246,6 +246,14 @@ mt7996_mcu_send_message(struct mt76_dev *mdev, struct sk_buff *skb,
 	u32 val;
 	u8 seq;
 
+	if (dev->recovery.l1_reset_last != dev->recovery.l1_reset) {
+		dev_info(dev->mt76.dev,"\n%s L1 SER recovery overlap, drop message %08x.",
+			 wiphy_name(dev->mt76.hw->wiphy), cmd);
+
+		dev_kfree_skb(skb);
+		return -EPERM;
+	}
+
 	mdev->mcu.timeout = 20 * HZ;
 
 	seq = ++dev->mt76.mcu.msg_seq & 0xf;

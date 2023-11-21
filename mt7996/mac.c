@@ -1876,6 +1876,7 @@ void mt7996_mac_reset_work(struct work_struct *work)
 	if (!(READ_ONCE(dev->recovery.state) & MT_MCU_CMD_STOP_DMA))
 		return;
 
+	dev->recovery.l1_reset_last = dev->recovery.l1_reset;
 	dev_info(dev->mt76.dev,"\n%s L1 SER recovery start.",
 		 wiphy_name(dev->mt76.hw->wiphy));
 
@@ -1893,6 +1894,10 @@ void mt7996_mac_reset_work(struct work_struct *work)
 
 	set_bit(MT76_RESET, &dev->mphy.state);
 	set_bit(MT76_MCU_RESET, &dev->mphy.state);
+	if (phy2)
+		set_bit(MT76_RESET, &phy2->mt76->state);
+	if (phy3)
+		set_bit(MT76_RESET, &phy3->mt76->state);
 	wake_up(&dev->mt76.mcu.wait);
 
 	mt76_worker_disable(&dev->mt76.tx_worker);
@@ -2106,6 +2111,9 @@ void mt7996_reset(struct mt7996_dev *dev)
 		mt7996_coredump(dev, MT7996_COREDUMP_AUTO);
 		return;
 	}
+
+	if ((READ_ONCE(dev->recovery.state) & MT_MCU_CMD_STOP_DMA))
+		dev->recovery.l1_reset++;
 
 	queue_work(dev->mt76.wq, &dev->reset_work);
 	wake_up(&dev->reset_wait);

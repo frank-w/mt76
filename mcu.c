@@ -94,7 +94,8 @@ int mt76_mcu_skb_send_and_get_msg(struct mt76_dev *dev, struct sk_buff *skb,
 		if (retry && retry_cnt < MT76_MSG_MAX_RETRY_CNT) {
 			if (test_bit(MT76_MCU_RESET, &dev->phy.state))
 				usleep_range(200000, 500000);
-			dev_err(dev->dev, "send message %08x timeout, try again.\n", cmd);
+			dev_err(dev->dev, "send message %08x timeout, try again(%d).\n",
+				cmd, (MT76_MSG_MAX_RETRY_CNT - retry_cnt));
 		}
 
 		ret = dev->mcu_ops->mcu_skb_send_msg(dev, skb_tmp, cmd, &seq);
