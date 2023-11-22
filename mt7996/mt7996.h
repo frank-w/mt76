@@ -829,6 +829,7 @@ void mt7996_set_wireless_amsdu(struct ieee80211_hw *hw, u8 en);
 void mt7996_mcu_set_mimo(struct mt7996_phy *phy);
 int mt7996_set_muru_cfg(struct mt7996_phy *phy, u8 action, u8 val);
 int mt7996_mcu_set_muru_cfg(struct mt7996_phy *phy, void *data);
+void mt7996_set_beacon_vif(void *data, u8 *mac, struct ieee80211_vif *vif);
 #endif
 
 int mt7996_mcu_edcca_enable(struct mt7996_phy *phy, bool enable);

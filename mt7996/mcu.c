@@ -5067,4 +5067,15 @@ void mt7996_set_wireless_vif(void *data, u8 *mac, struct ieee80211_vif *vif)
 		break;
 	}
 }
+
+void mt7996_set_beacon_vif(void *data, u8 *mac, struct ieee80211_vif *vif)
+{
+	struct mt7996_vif *mvif = (struct mt7996_vif *)vif->drv_priv;
+	struct ieee80211_hw *hw = mvif->phy->mt76->hw;
+	u8 val = *((u8 *)data);
+
+	vif->bss_conf.enable_beacon = val;
+
+	mt7996_mcu_add_beacon(hw, vif, val);
+}
 #endif
