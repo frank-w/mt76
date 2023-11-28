@@ -10,6 +10,9 @@
 
 #ifdef CONFIG_MTK_DEBUG
 
+enum {
+	UNI_CMD_MURU_DBG_INFO = 0x18,
+};
 
 #endif
 

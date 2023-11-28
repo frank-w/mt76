@@ -677,6 +677,7 @@ u32 mt7996_wed_init_buf(void *ptr, dma_addr_t phys, int token_id);
 
 #ifdef CONFIG_MTK_DEBUG
 int mt7996_mtk_init_debugfs(struct mt7996_phy *phy, struct dentry *dir);
+int mt7996_mcu_muru_dbg_info(struct mt7996_dev *dev, u16 item, u8 val);
 #endif
 
 #ifdef CONFIG_NET_MEDIATEK_SOC_WED

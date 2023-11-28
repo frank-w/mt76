@@ -424,6 +424,36 @@ remove_buf_file_cb(struct dentry *f)
 }
 
 static int
+mt7996_fw_debug_muru_set(void *data)
+{
+	struct mt7996_dev *dev = data;
+	enum {
+		DEBUG_BSRP_STATUS = 256,
+		DEBUG_TX_DATA_BYTE_CONUT,
+		DEBUG_RX_DATA_BYTE_CONUT,
+		DEBUG_RX_TOTAL_BYTE_CONUT,
+		DEBUG_INVALID_TID_BSR,
+		DEBUG_UL_LONG_TERM_PPDU_TYPE,
+		DEBUG_DL_LONG_TERM_PPDU_TYPE,
+		DEBUG_PPDU_CLASS_TRIG_ONOFF,
+		DEBUG_AIRTIME_BUSY_STATUS,
+		DEBUG_UL_OFDMA_MIMO_STATUS,
+		DEBUG_RU_CANDIDATE,
+		DEBUG_MEC_UPDATE_AMSDU,
+	} debug;
+	int ret;
+
+	for (debug = DEBUG_BSRP_STATUS; debug <= DEBUG_MEC_UPDATE_AMSDU; debug++) {
+		ret = mt7996_mcu_muru_dbg_info(dev, debug,
+					       dev->fw_debug_bin & BIT(0));
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+static int
 mt7996_fw_debug_bin_set(void *data, u64 val)
 {
 	static struct rchan_callbacks relay_cb = {
@@ -431,6 +461,7 @@ mt7996_fw_debug_bin_set(void *data, u64 val)
 		.remove_buf_file = remove_buf_file_cb,
 	};
 	struct mt7996_dev *dev = data;
+	int ret;
 
 	if (!dev->relay_fwlog) {
 		dev->relay_fwlog = relay_open("fwlog_data", dev->debugfs_dir,
@@ -442,6 +473,10 @@ mt7996_fw_debug_bin_set(void *data, u64 val)
 	dev->fw_debug_bin = val;
 
 	relay_reset(dev->relay_fwlog);
+
+	ret = mt7996_fw_debug_muru_set(dev);
+	if (ret)
+		return ret;
 
 	return mt7996_fw_debug_wm_set(dev, dev->fw_debug_wm);
 }
