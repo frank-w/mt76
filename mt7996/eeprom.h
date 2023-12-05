@@ -70,6 +70,18 @@ static const u32 mt7996_prek_rev[] = {
 	[DPD_OTFG0_SIZE] =			2 * MT_EE_CAL_UNIT,
 };
 
+static const u32 mt7996_prek_rev_233[] = {
+	[GROUP_SIZE_2G] =			4 * MT_EE_CAL_UNIT,
+	[GROUP_SIZE_5G] =			44 * MT_EE_CAL_UNIT,
+	[GROUP_SIZE_6G] =			100 * MT_EE_CAL_UNIT,
+	[ADCDCOC_SIZE_2G] =			4 * 4,
+	[ADCDCOC_SIZE_5G] =			4 * 4,
+	[ADCDCOC_SIZE_6G] =			4 * 5,
+	[DPD_LEGACY_SIZE] =			4 * MT_EE_CAL_UNIT,
+	[DPD_MEM_SIZE] =			13 * MT_EE_CAL_UNIT,
+	[DPD_OTFG0_SIZE] =			2 * MT_EE_CAL_UNIT,
+};
+
 /* kite 2/5g config */
 static const u32 mt7992_prek_rev[] = {
 	[GROUP_SIZE_2G] =			4 * MT_EE_CAL_UNIT,
