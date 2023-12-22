@@ -472,6 +472,7 @@ struct mt7996_dev {
 	u8 fw_debug_wa;
 	u8 fw_debug_bin;
 	u16 fw_debug_seq;
+	bool fw_debug_muru_disable;
 
 	struct dentry *debugfs_dir;
 	struct rchan *relay_fwlog;

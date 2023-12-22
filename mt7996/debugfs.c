@@ -463,6 +463,9 @@ mt7996_fw_debug_muru_set(void *data)
 	} debug;
 	int ret;
 
+	if (dev->fw_debug_muru_disable)
+		return 0;
+
 	for (debug = DEBUG_BSRP_STATUS; debug <= DEBUG_MEC_UPDATE_AMSDU; debug++) {
 		ret = mt7996_mcu_muru_dbg_info(dev, debug,
 					       dev->fw_debug_bin & BIT(0));
@@ -867,6 +870,30 @@ mt7996_rf_regval_set(void *data, u64 val)
 DEFINE_DEBUGFS_ATTRIBUTE(fops_rf_regval, mt7996_rf_regval_get,
 			 mt7996_rf_regval_set, "0x%08llx\n");
 
+static int
+mt7996_fw_debug_muru_disable_set(void *data, u64 val)
+{
+	struct mt7996_dev *dev = data;
+
+	dev->fw_debug_muru_disable = !!val;
+
+	return 0;
+}
+
+static int
+mt7996_fw_debug_muru_disable_get(void *data, u64 *val)
+{
+	struct mt7996_dev *dev = data;
+
+	*val = dev->fw_debug_muru_disable;
+
+	return 0;
+}
+
+DEFINE_DEBUGFS_ATTRIBUTE(fops_fw_debug_muru_disable,
+			 mt7996_fw_debug_muru_disable_get,
+			 mt7996_fw_debug_muru_disable_set, "%lld\n");
+
 int mt7996_init_debugfs(struct mt7996_phy *phy)
 {
 	struct mt7996_dev *dev = phy->dev;
@@ -902,6 +929,8 @@ int mt7996_init_debugfs(struct mt7996_phy *phy)
 		debugfs_create_devm_seqfile(dev->mt76.dev, "rdd_monitor", dir,
 					    mt7996_rdd_monitor);
 	}
+	debugfs_create_file("fw_debug_muru_disable", 0600, dir, dev,
+			    &fops_fw_debug_muru_disable);
 
 	if (phy == &dev->phy)
 		dev->debugfs_dir = dir;
