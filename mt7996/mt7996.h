@@ -230,6 +230,7 @@ struct mt7996_vif {
 struct mt7996_crash_data {
 	guid_t guid;
 	struct timespec64 timestamp;
+	bool supported;
 
 	u8 *memdump_buf;
 	size_t memdump_buf_len;
