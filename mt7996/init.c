@@ -1493,6 +1493,8 @@ int mt7996_register_device(struct mt7996_dev *dev)
 	INIT_WORK(&dev->dump_work, mt7996_mac_dump_work);
 	mutex_init(&dev->dump_mutex);
 
+	INIT_WORK(&dev->wmm_pbc_work, mt7996_mcu_wmm_pbc_work);
+
 	ret = mt7996_init_hardware(dev);
 	if (ret)
 		return ret;

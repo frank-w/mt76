@@ -601,6 +601,9 @@ struct mt7996_dev {
 	u8 wtbl_size_group;
 
 	struct mt7996_vow_ctrl vow;
+
+	bool wmm_pbc_enable;
+	struct work_struct wmm_pbc_work;
 #ifdef CONFIG_MTK_DEBUG
 	u16 wlan_idx;
 	struct {
@@ -852,6 +855,7 @@ int mt7996_mcu_set_band_confg(struct mt7996_phy *phy, u16 option, bool enable);
 int mt7996_mcu_set_vow_drr_ctrl(struct mt7996_phy *phy, struct mt7996_sta *msta,
 	                        enum vow_drr_ctrl_id id);
 int mt7996_mcu_set_vow_feature_ctrl(struct mt7996_phy *phy);
+void mt7996_mcu_wmm_pbc_work(struct work_struct *work);
 
 static inline u8 mt7996_max_interface_num(struct mt7996_dev *dev)
 {

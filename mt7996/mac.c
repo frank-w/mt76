@@ -2288,6 +2288,10 @@ void mt7996_mac_work(struct work_struct *work)
 					mt7996_mcu_get_all_sta_info(mdev, UNI_ALL_STA_TXRX_ADM_STAT);
 					mt7996_mcu_get_all_sta_info(mdev, UNI_ALL_STA_TXRX_MSDU_COUNT);
 				}
+
+				if (mt7996_mcu_wa_cmd(phy->dev, MCU_WA_PARAM_CMD(QUERY), MCU_WA_PARAM_BSS_ACQ_PKT_CNT,
+				                      BSS_ACQ_PKT_CNT_BSS_BITMAP_ALL | BSS_ACQ_PKT_CNT_READ_CLR, 0))
+					dev_err(mdev->dev, "Failed to query per-AC-queue packet counts.\n");
 			} else if (mt7996_band_valid(phy->dev, i) &&
 			           test_bit(MT76_STATE_RUNNING, &mdev->phys[i]->state))
 				break;

@@ -666,6 +666,82 @@ mt7996_mcu_rx_thermal_notify(struct mt7996_dev *dev, struct sk_buff *skb)
 	phy->throttle_state = n->duty_percent;
 }
 
+void mt7996_mcu_wmm_pbc_work(struct work_struct *work)
+{
+#define WMM_PBC_QUEUE_NUM	5
+#define WMM_PBC_BSS_ALL		0xff
+#define WMM_PBC_WLAN_IDX_ALL	0xffff
+#define WMM_PBC_BOUND_DEFAULT	0xffff
+#define WMM_PBC_LOW_BOUND_VO	1900
+#define WMM_PBC_LOW_BOUND_VI	1900
+#define WMM_PBC_LOW_BOUND_BE	1500
+#define WMM_PBC_LOW_BOUND_BK	900
+#define WMM_PBC_LOW_BOUND_MGMT	32
+	struct mt7996_dev *dev = container_of(work, struct mt7996_dev, wmm_pbc_work);
+	struct {
+		u8 bss_idx;
+		u8 queue_num;
+		__le16 wlan_idx;
+		u8 band_idx;
+		u8 __rsv[3];
+		struct {
+			__le16 low;
+			__le16 up;
+		} __packed bound[WMM_PBC_QUEUE_NUM];
+	} __packed req = {
+		.bss_idx = WMM_PBC_BSS_ALL,
+		.queue_num = WMM_PBC_QUEUE_NUM,
+		.wlan_idx = cpu_to_le16(WMM_PBC_WLAN_IDX_ALL),
+		.band_idx = dev->mphy.band_idx,
+	};
+	int i, ret;
+
+#define pbc_acq_low_bound_config(_ac, _bound)								\
+	req.bound[mt76_connac_lmac_mapping(_ac)].low = dev->wmm_pbc_enable ? cpu_to_le16(_bound) : 0
+	pbc_acq_low_bound_config(IEEE80211_AC_VO, WMM_PBC_LOW_BOUND_VO);
+	pbc_acq_low_bound_config(IEEE80211_AC_VI, WMM_PBC_LOW_BOUND_VI);
+	pbc_acq_low_bound_config(IEEE80211_AC_BE, WMM_PBC_LOW_BOUND_BE);
+	pbc_acq_low_bound_config(IEEE80211_AC_BK, WMM_PBC_LOW_BOUND_BK);
+	req.bound[4].low = dev->wmm_pbc_enable
+	                   ? cpu_to_le16(WMM_PBC_LOW_BOUND_MGMT) : 0;
+
+	for (i = 0; i < WMM_PBC_QUEUE_NUM; ++i)
+		req.bound[i].up = cpu_to_le16(WMM_PBC_BOUND_DEFAULT);
+
+	ret = mt76_mcu_send_msg(&dev->mt76, MCU_WA_EXT_CMD(PKT_BUDGET_CTRL),
+	                        &req, sizeof(req), true);
+	if (ret)
+		dev_err(dev->mt76.dev, "Failed to configure WMM PBC.\n");
+}
+
+static void
+mt7996_mcu_rx_bss_acq_pkt_cnt(struct mt7996_dev *dev, struct sk_buff *skb)
+{
+	struct mt7996_mcu_bss_acq_pkt_cnt_event *event = (struct mt7996_mcu_bss_acq_pkt_cnt_event *)skb->data;
+	u32 bitmap = le32_to_cpu(event->bss_bitmap);
+	u64 sum[IEEE80211_NUM_ACS] = {0};
+	u8 ac_cnt = 0;
+	int i, j;
+
+	for (i = 0; (i < BSS_ACQ_PKT_CNT_BSS_NUM) && (bitmap & (1 << i)); ++i) {
+		for (j = IEEE80211_AC_VO; j < IEEE80211_NUM_ACS; ++j)
+			sum[j] += le32_to_cpu(event->bss[i].cnt[mt76_connac_lmac_mapping(j)]);
+	}
+
+	for (i = IEEE80211_AC_VO; i < IEEE80211_NUM_ACS; ++i) {
+		if (sum[i] > WMM_PKT_THRESHOLD)
+			++ac_cnt;
+	}
+
+	if (ac_cnt > 1 && !dev->wmm_pbc_enable) {
+		dev->wmm_pbc_enable = true;
+		queue_work(dev->mt76.wq, &dev->wmm_pbc_work);
+	} else if (ac_cnt <= 1 && dev->wmm_pbc_enable) {
+		dev->wmm_pbc_enable = false;
+		queue_work(dev->mt76.wq, &dev->wmm_pbc_work);
+	}
+}
+
 static void
 mt7996_mcu_rx_ext_event(struct mt7996_dev *dev, struct sk_buff *skb)
 {
@@ -675,6 +751,8 @@ mt7996_mcu_rx_ext_event(struct mt7996_dev *dev, struct sk_buff *skb)
 	case MCU_EXT_EVENT_FW_LOG_2_HOST:
 		mt7996_mcu_rx_log_message(dev, skb);
 		break;
+	case MCU_EXT_EVENT_BSS_ACQ_PKT_CNT:
+		mt7996_mcu_rx_bss_acq_pkt_cnt(dev, skb);
 	default:
 		break;
 	}
